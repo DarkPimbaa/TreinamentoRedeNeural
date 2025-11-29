@@ -47,6 +47,8 @@ struct Rede{
     bool saida[NUM_SAIDAS] = { false }; // por padrão false
 };
 
+//TODO otimizar processamento desperdiçado e tamanho desnecessario
+
 // importante usar os defines
 class RedeNeural{
     
@@ -217,7 +219,7 @@ int main(){
     cudaMalloc(&d_redes, numeroDeRedes * sizeof(RedeNeural));
     cudaMemcpy(d_redes, h_redes, numeroDeRedes * sizeof(RedeNeural), cudaMemcpyHostToDevice);
 
-    int block = 128;
+    int block = 32;
     int grid = (numeroDeRedes + block - 1) / block;
     int totalThreads = grid * block;
     curandState* d_states;
@@ -228,10 +230,11 @@ int main(){
     cudaDeviceSynchronize();
 
     kernelTreino<<<grid, block>>>(d_redes, d_candles, numeroDeCandles, numeroDeRedes, d_states);
-
-    //TODO adicionar logica de o que fazer com o resultado da que vier da gpu, juntamente com o loop de treino
-
     cudaDeviceSynchronize();
+   
+
+    //TODO adicionar logica de o que fazer com o resultado que vier da gpu, juntamente com o loop de treino
+
     cudaFree(d_candles);
     cudaFree(d_redes);
     cudaFree(d_states);
