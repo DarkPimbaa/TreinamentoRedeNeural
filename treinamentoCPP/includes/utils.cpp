@@ -1,16 +1,10 @@
+#pragma once
+
 #include "utils.hpp"
 #include <fstream>
 #include <sstream>
 #include <random>
 
-
-bool chance_50() {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    static std::bernoulli_distribution d(0.5); // 50% true, 50% false
-    
-    return d(gen);
-}
 
 std::vector<Candle> lerCSV(const std::string& caminho) {
     std::ifstream file(caminho);
@@ -47,3 +41,29 @@ std::vector<Candle> lerCSV(const std::string& caminho) {
 
     return dados;
 }
+
+
+class Rand {
+    inline static std::random_device rd;
+    inline static std::mt19937 gen{rd()};
+    
+public:
+    // Inteiro entre min e max (inclusive)
+    static int Int(int min, int max) {
+        std::uniform_int_distribution<int> dist(min, max);
+        return dist(gen);
+    }
+    
+    // Double entre min e max (max exclusivo por padrão, como em Python)
+    static double Float(double min = 0.0, double max = 1.0) {
+        std::uniform_real_distribution<double> dist(min, max);
+        return dist(gen);
+    }
+    
+    // Escolhe um elemento aleatório de qualquer container (vector, array, string...)
+    template<typename Container>
+    static auto Choice(const Container& c) -> decltype(auto) {
+        std::uniform_int_distribution<size_t> dist(0, c.size() - 1);
+        return c[dist(gen)];
+    }
+};
