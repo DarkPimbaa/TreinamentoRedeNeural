@@ -1,0 +1,1 @@
+esse programa compra e vende aleatoriamente de acordo com o preço do bitcoin

@@ -1,6 +1,16 @@
 #include "utils.hpp"
 #include <fstream>
 #include <sstream>
+#include <random>
+
+
+bool chance_50() {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::bernoulli_distribution d(0.5); // 50% true, 50% false
+    
+    return d(gen);
+}
 
 std::vector<Candle> lerCSV(const std::string& caminho) {
     std::ifstream file(caminho);

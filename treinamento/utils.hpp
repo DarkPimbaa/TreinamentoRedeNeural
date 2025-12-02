@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 #include <vector>
-#include "types.hpp"   // ajuste o nome conforme você renomear o types.cu
+#include "types.hpp"
 
+
+// le o arquivo csv e retorna uma array com todos os candles
 std::vector<Candle> lerCSV(const std::string& caminho);
