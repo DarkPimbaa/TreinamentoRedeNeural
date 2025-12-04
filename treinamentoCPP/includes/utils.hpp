@@ -22,3 +22,6 @@ public:
     template<typename Container>
     static auto Choice(const Container& c) -> decltype(auto);
 };
+
+//retorna o vetor de candles normalizado baseado na abetura do candle no ultimo indice do vetor
+std::vector<Candle> normalizarCandle(std::vector<Candle> candles);

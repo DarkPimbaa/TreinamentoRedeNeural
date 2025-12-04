@@ -44,13 +44,8 @@ public:
         return Resultado(); 
         }
 
-        //zera os valores de toda a rede neural
+        //zera os valores de toda a rede neural e o resultado
         zeraValores();
-
-        // zera o resultado
-        for (size_t i = 0; i < NUM_SAIDAS; i++) {
-            resultado.resultado[i] = false;
-        }
 
         // loop que inicia os valores dos neuronios de entrada
         for (size_t neuronio = 0; neuronio < NUM_ENTRADAS; neuronio++) {
@@ -113,7 +108,7 @@ public:
     }
 
 
-    /** zera os valores de toda a rede neural */
+    /** zera os valores de toda a rede neural e resultado*/
     void zeraValores(){
         
         // zera os neuronios de entrada
@@ -131,6 +126,11 @@ public:
         // zera os valores dos neuronios de saida
         for (size_t neuronio = 0 ; neuronio < NUM_SAIDAS; neuronio++) {
             rede.saida[neuronio].valor = 0.f;
+        }
+
+        // zera o resultado
+        for (size_t i = 0; i < NUM_SAIDAS; i++) {
+            resultado.resultado[i] = false;
         }
 
     };

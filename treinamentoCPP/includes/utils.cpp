@@ -1,7 +1,7 @@
 #include "utils.hpp"
 #include <fstream>
 #include <sstream>
-#include <random>
+#include <vector>
 
 
 std::vector<Candle> lerCSV(const std::string& caminho) {
@@ -58,5 +58,19 @@ std::vector<Candle> lerCSV(const std::string& caminho) {
     auto Rand::Choice(const Container& c) -> decltype(auto) {
         std::uniform_int_distribution<size_t> dist(0, c.size() - 1);
         return c[dist(gen)];
+    };
+
+    // normaliza um vetor de candles baseado na abertura do ultimo candle
+    std::vector<Candle> normalizarCandle(std::vector<Candle> candles){
+        float factor = candles.back().abertura;
+
+        for (auto& c : candles) {
+            c.abertura /= factor;
+            c.maxima /= factor;
+            c.minima /= factor;
+            c.fechamento /= factor;
+        };
+
+        return candles;
     };
 
