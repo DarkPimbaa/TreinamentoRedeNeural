@@ -2,8 +2,7 @@
 
 #include <cstddef>
 #include <vector>
-// NUNCA faça #include de .cpp em header → remova "./utils.cpp"
-// #include "./types.hpp" só se realmente precisar de tipos definidos lá
+#include "./utils.hpp"
 
 #define NUM_ENTRADAS 60
 #define NUM_CAMADAS 5
@@ -17,6 +16,7 @@ struct Neuronio {
 
 struct Camada {
     Neuronio neuronio[NUM_ENTRADAS];
+    //Neuronio bias; //TODO implementar um o calculo de bias nas camadas ocultas
 };
 
 struct Rede {
@@ -37,14 +37,20 @@ public:
     // Construtor que inicializa TUDO de uma vez
     RedeNeural();
 
-    // função que iterar sobre todos os neuronios e vai trazer um resultado
+    // função que itera sobre todos os neuronios e retorna um resultado
     Resultado iniciar(std::vector<float> valores){
         if (valores.size() != NUM_ENTRADAS) {
         // Tratar erro, lançar exceção ou retornar resultado vazio
         return Resultado(); 
         }
 
-        //TODO criar função que zera os valores de entrada, camadas ocultas e saida.
+        //zera os valores de toda a rede neural
+        zeraValores();
+
+        // zera o resultado
+        for (size_t i = 0; i < NUM_SAIDAS; i++) {
+            resultado.resultado[i] = false;
+        }
 
         // loop que inicia os valores dos neuronios de entrada
         for (size_t neuronio = 0; neuronio < NUM_ENTRADAS; neuronio++) {
@@ -106,8 +112,103 @@ public:
 
     }
 
-    //TODO criar função de inicializar os pesos aleatoriamente
 
-    //TODO criar funções de set e get
+    /** zera os valores de toda a rede neural */
+    void zeraValores(){
+        
+        // zera os neuronios de entrada
+        for (size_t neuronio = 0; neuronio < NUM_ENTRADAS; neuronio++) {
+            rede.entrada[neuronio] = 0.f;
+        }
+
+        // zera os valores das camadas ocultas
+        for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {
+            for (size_t neuronio = 0; neuronio < NUM_ENTRADAS; neuronio++) {
+                rede.oculto[camada].neuronio[neuronio].valor = 0.f;
+            }
+        }
+
+        // zera os valores dos neuronios de saida
+        for (size_t neuronio = 0 ; neuronio < NUM_SAIDAS; neuronio++) {
+            rede.saida[neuronio].valor = 0.f;
+        }
+
+    };
+    
+    // inicializa os pesos dos neuronios das camadas ocultas e camada de saida
+    void iniciarPesos(){
+
+        //! talvez seja preciso fazer um cast (float) porque Rand::float retorna um double
+
+        // inicia os pesos de camada de saida
+        for(size_t neuronio = 0; neuronio < NUM_SAIDAS; neuronio++){
+            for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+                rede.saida[neuronio].peso[peso] = Rand::Float(-1.f, 1.f);
+            }
+        };
+
+        // inicia os pesos das camadas ocultas
+        for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {
+            for (size_t neuronio = 0; neuronio < NUM_ENTRADAS; neuronio++) {
+                for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+                    rede.oculto[camada].neuronio[neuronio].peso[peso] = Rand::Float(-1.f, 1.f);
+                }
+            }
+        }
+
+    };
+
+    // tem 10% de chance de mutar cada peso aleatóriamente para cima ou para baixo por 0.1
+    void mutacao(){
+        
+        // muta os pesos dos neuronios de saida limitando entre -1 e 1
+        for(size_t neuronio = 0; neuronio < NUM_SAIDAS; neuronio++){
+            for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+                if (Rand::Int(0, 10) == 1) {
+                    if (Rand::Int( 0, 1) == 1) {
+                        rede.saida[neuronio].peso[peso] += 0.1f;
+                        if (rede.saida[neuronio].peso[peso] > 1.f) {
+                            rede.saida[neuronio].peso[peso] = 1.f;
+                        }
+                    }else{
+                        rede.saida[neuronio].peso[peso] += -0.1f;
+                        if (rede.saida[neuronio].peso[peso] < -1.f) {
+                            rede.saida[neuronio].peso[peso] = -1.f;
+                        }
+                    }
+                }
+            }
+        };
+
+        // muta os pesos das camadas ocultas
+        for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {
+            for(size_t neuronio = 0; neuronio < NUM_ENTRADAS; neuronio++){
+                for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+                    if (Rand::Int(0, 10) == 1) {
+                        if (Rand::Int( 0, 1) == 1) {
+                            rede.oculto[camada].neuronio[neuronio].peso[peso] += 0.1;
+                            if (rede.oculto[camada].neuronio[neuronio].peso[peso] > 1.f) {
+                                rede.oculto[camada].neuronio[neuronio].peso[peso] = 1.f;
+                            }
+                        }else{
+                            rede.oculto[camada].neuronio[neuronio].peso[peso] += -0.1;
+                            if (rede.oculto[camada].neuronio[neuronio].peso[peso] < -1.f) {
+                                rede.oculto[camada].neuronio[neuronio].peso[peso] = -1.f;
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+    }
+
+    void setRede(Rede rede){
+        this->rede = rede;
+    };
+
+    Rede getRede(){
+        return this->rede;
+    };
     
 };

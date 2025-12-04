@@ -1,5 +1,3 @@
-#pragma once
-
 #include "utils.hpp"
 #include <fstream>
 #include <sstream>
@@ -43,27 +41,22 @@ std::vector<Candle> lerCSV(const std::string& caminho) {
 }
 
 
-class Rand {
-    inline static std::random_device rd;
-    inline static std::mt19937 gen{rd()};
-    
-public:
     // Inteiro entre min e max (inclusive)
-    static int Int(int min, int max) {
+    int Rand::Int(int min, int max) {
         std::uniform_int_distribution<int> dist(min, max);
         return dist(gen);
-    }
+    };
     
     // Double entre min e max (max exclusivo por padrão, como em Python)
-    static double Float(double min = 0.0, double max = 1.0) {
+    double Rand::Float(double min, double max) {
         std::uniform_real_distribution<double> dist(min, max);
         return dist(gen);
-    }
+    };
     
     // Escolhe um elemento aleatório de qualquer container (vector, array, string...)
     template<typename Container>
-    static auto Choice(const Container& c) -> decltype(auto) {
+    auto Rand::Choice(const Container& c) -> decltype(auto) {
         std::uniform_int_distribution<size_t> dist(0, c.size() - 1);
         return c[dist(gen)];
-    }
-};
+    };
+
