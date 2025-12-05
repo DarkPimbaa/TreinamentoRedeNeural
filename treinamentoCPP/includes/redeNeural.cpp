@@ -11,12 +11,12 @@
 
 struct Neuronio {
     float valor = 0.f;
-    float peso[NUM_ENTRADAS] = { 0.f};        // recomendo float, não int
+    float peso[NUM_ENTRADAS] = { 0.f};
 };
 
 struct Camada {
     Neuronio neuronio[NUM_ENTRADAS];
-    //Neuronio bias; //TODO implementar um o calculo de bias nas camadas ocultas
+    //Neuronio bias; //TODO implementar o calculo de bias nas camadas ocultas
 };
 
 struct Rede {
@@ -33,6 +33,8 @@ class RedeNeural {
 public:
     Rede rede;
     Resultado resultado;
+    int ganho = 0;
+    int perda = 0;
 
     // Construtor que inicializa TUDO de uma vez
     RedeNeural();

@@ -4,6 +4,7 @@
 #include "utils.hpp"
 #include <cstddef>
 #include <vector>
+#include "./redeNeural.cpp"
 
 #ifndef NUM_ENTRADAS
 // Se NUM_ENTRADAS AINDA NÃO estiver definido...
@@ -22,12 +23,14 @@ public:
     std::vector<Candle> historico;
     std::vector<Candle> historicoNormalizado;
     std::vector<Aposta> apostas;
+    int indice = -1;
     
     // inicia o histórico de candles
     Corretora(){
         candle = lerCSV("./filtrado.csv");
         for (size_t i = 0; i < NUM_ENTRADAS / 10; i++) {
-            historico[i] = candle[i];
+            historico.push_back(candle[i]);
+            indice++;
         }
 
         historicoNormalizado = normalizarCandle(historico);
@@ -41,11 +44,47 @@ public:
         apostas.push_back(aposta);
     }
 
-    //TODO criar função que vai atualizar o histórico
+    // atualiza o historico normal e o historico normalizado
+    void attHistorico(){
 
-    //TODO criar função que retornar o resultado da aposta para os apostados(ver quem ganhou e quem perdeu) e atualizar o histórico.
+        for (size_t i = 0; i < historico.size() - 1; i++) {
+            historico[i] = historico[i + 1];
+        }
+        
+        historico[historico.size() - 1] = candle[indice];
+        historicoNormalizado = normalizarCandle(historico);
+    }
 
-    //TODO função que vai zerar a lista de apostas
+    // gera o resultado e atualiza o histórico
+    void gerarResultado(std::vector<RedeNeural>& redes){
+
+        bool resultado;
+        if (indice + 1 >= candle.size()) {
+            // Finalizar simulação ou retornar
+            return; 
+        }
+        if (candle[indice].abertura > candle[indice + 1].abertura ) {
+            resultado = false;
+        }else {
+            resultado = true;
+        }
+        indice++;
+        attHistorico();
+
+        // for que itera sobre todas as apostas
+        for (size_t i = 0; i < apostas.size(); i++) {
+            
+            if (apostas[i].compraOuVenda == true && resultado == true) {
+                redes[apostas[i].incideDoApostador].ganho++;
+            
+            }else if (apostas[i].compraOuVenda == false && resultado == false) {
+                redes[apostas[i].incideDoApostador].ganho++;
+            }else{
+                redes[apostas[i].incideDoApostador].perda++;
+            }
+        }
+        apostas.clear();
+    }
 
 
 };
