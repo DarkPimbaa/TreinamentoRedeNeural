@@ -4,10 +4,15 @@
 #include <vector>
 #include "./utils.hpp"
 
+#ifndef NUM_ENTRADAS
 #define NUM_ENTRADAS 60
+#endif
+#ifndef NUM_CAMADAS
 #define NUM_CAMADAS 5
+#endif
+#ifndef NUM_SAIDAS
 #define NUM_SAIDAS 2
-
+#endif
 
 struct Neuronio {
     float valor = 0.f;
@@ -37,7 +42,9 @@ public:
     int perda = 0;
 
     // Construtor que inicializa TUDO de uma vez
-    RedeNeural();
+    RedeNeural(){
+        iniciarPesos();
+    };
 
     // função que itera sobre todos os neuronios e retorna um resultado
     Resultado iniciar(std::vector<float> valores){

@@ -8,7 +8,7 @@
 
 #ifndef NUM_ENTRADAS
 // Se NUM_ENTRADAS AINDA NÃO estiver definido...
-#define NUM_ENTRADAS 60
+#define NUM_ENTRADAS 60 //
 // ...agora o definimos com 60
 #endif
 
@@ -28,7 +28,7 @@ public:
     // inicia o histórico de candles
     Corretora(){
         candle = lerCSV("./filtrado.csv");
-        for (size_t i = 0; i < NUM_ENTRADAS / 10; i++) {
+        for (size_t i = 0; i < NUM_ENTRADAS / 6; i++) {
             historico.push_back(candle[i]);
             indice++;
         }
