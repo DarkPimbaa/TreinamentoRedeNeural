@@ -79,25 +79,33 @@ for (size_t geracao = 0; geracao < 10; geracao++) {
 
 
     // iniciar o loop de apostas
-for (size_t i = 0; i < 100; i++) {
-    std::vector<float> valores;
+for (size_t i = 0; i < 1000; i++) {
+    std::vector<float> entrada;
     
-    // carrega o vetor valores com os valores em float dos candles.
-    for (size_t i = 0; i < corretora.historicoNormalizado.size(); i++) {
-        int ii = i * 6;
-        valores.push_back(corretora.historicoNormalizado[ii].abertura);
-        valores.push_back(corretora.historicoNormalizado[ii + 1].maxima);
-        valores.push_back(corretora.historicoNormalizado[ii + 2].minima);
-        valores.push_back(corretora.historicoNormalizado[ii + 3].fechamento);
-        valores.push_back(corretora.historicoNormalizado[ii + 4].volume);
-        valores.push_back(corretora.historicoNormalizado[ii + 5].trades);
+    // Verifica se tem pelo menos 10 candles carregados
+    if (corretora.historicoNormalizado.size() < 10) {
+        std::cout << "Erro: só tem " << corretora.historicoNormalizado.size() 
+                << " candles. Precisa de no mínimo 10." << std::endl;
+        return 1;
+    }
+
+    // Cria o vetor de entrada com os últimos 10 candles (ou os 10 primeiros, você escolhe)
+
+    for (size_t i = 0; i < 10; i++) {
+        const Candle& c = corretora.historicoNormalizado[i];  // <--- índices 0 a 9
+        entrada.push_back(c.abertura);
+        entrada.push_back(c.maxima);
+        entrada.push_back(c.minima);
+        entrada.push_back(c.fechamento);
+        entrada.push_back(c.volume);
+        entrada.push_back(c.trades);
     }
 
 
 
     // cada rede verifica se vai apostar ou não
     for (size_t rede = 0; rede < redes.size(); rede++) {
-        Resultado resultado = redes[rede].iniciar(valores);
+        Resultado resultado = redes[rede].iniciar(entrada);
 
         if (resultado.resultado[0] == true && resultado.resultado[1] == true) {
             // não faz nada
@@ -126,12 +134,16 @@ repovoarComMelhores(melhores10, redes);
 for (RedeNeural rede : redes) {
     rede.mutacao();
 }
-system("cls");
+system("clear");
+
+float media;
+
+media = ( ( (float)melhores10[0].ganho / (melhores10[0].ganho + melhores10[0].perda)) * 100);
 
 std::cout << "melhor individuo da geracao: " << geracao << std::endl;
 std::cout << "ganhos: " << melhores10[0].ganho << std::endl;
-std::cout << "ganhos: " << melhores10[0].ganho << std::endl;
-std::cout << "media: : " << ((melhores10[0].ganho / (melhores10[0].ganho + melhores10[0].perda)) * 100.0) << std::endl;
+std::cout << "perdas: " << melhores10[0].perda << std::endl;
+std::cout << "media: " << media << std::endl;
 }
     return 0;
 }
