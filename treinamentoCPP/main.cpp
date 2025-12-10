@@ -14,28 +14,41 @@
 #define NUM_SAIDAS 2
 #define NUM_INDIVIDUOS 100
 
+// --- GLOBAIS ---
+
 // instancia as redes
 std::vector<RedeNeural> redes(NUM_INDIVIDUOS, RedeNeural());
 
-// vetor com os melhores individuos
+// vetor com os melhores individuos DA GERAÇÃO ATUAL
 std::vector<RedeNeural> melhores10(10, RedeNeural());
+
+// [NOVO] vetor com as 10 melhores redes DE TODO O TREINAMENTO
+std::vector<RedeNeural> melhores10TodosOsTempos;
 
 // instancia a corretora
 Corretora corretora = Corretora();
 
 
-// usado na função obterMelhores10
-struct Comparador {
+// Comparador para a Priority Queue (Max Heap)
+// Retorna true se A deve ficar "abaixo" de B na pilha
+struct ComparadorPQ {
     bool operator()(const RedeNeural& a, const RedeNeural& b) const {
         if (a.ganho != b.ganho)
-        return a.ganho < b.ganho;  // maior ganho vem primeiro
-    return a.perda > b.perda;    // se ganho igual, menor perda vem primeiro
-}
+            return a.ganho < b.ganho;  // Menor ganho fica embaixo (maior vai pro topo)
+        return a.perda > b.perda;      // Se ganho igual, maior perda fica embaixo (menor perda vai pro topo)
+    }
 };
 
-// retorna as 10 melhores redes neurais
+// [NOVO] Comparador para ordenação padrão (std::sort)
+// Retorna true se A é MELHOR que B (para ordenar do melhor para o pior)
+bool eMelhor(const RedeNeural& a, const RedeNeural& b) {
+    if (a.ganho != b.ganho) return a.ganho > b.ganho; // Maior ganho primeiro
+    return a.perda < b.perda;                         // Menor perda primeiro
+}
+
+// retorna as 10 melhores redes neurais da geração atual
 std::vector<RedeNeural> obterMelhores10(std::vector<RedeNeural>& redes) {
-    std::priority_queue<RedeNeural, std::vector<RedeNeural>, Comparador> pq;
+    std::priority_queue<RedeNeural, std::vector<RedeNeural>, ComparadorPQ> pq;
     
     for (const auto& rede : redes) {
         pq.push(rede);
@@ -54,96 +67,128 @@ std::vector<RedeNeural> obterMelhores10(std::vector<RedeNeural>& redes) {
     return top10;  // já vem ordenado do melhor para o 10º melhor
 }
 
-// repovoa o vetor de redes com as 10 melhores redes
-void repovoarComMelhores(std::vector<RedeNeural>& melhores10, std::vector<RedeNeural>& redes)
-{
-    const size_t pop = redes.size();
-    const size_t nMelhores = melhores10.size();  // deve ser 10
-    
-    for (size_t i = 0; i < pop; ++i) {
-        size_t idxOrigem = i / 10;                   // 0..9  → 0
-        // 10..19 → 1
-                                                     // 20..29 → 2
-                                                     // etc.
-        if (idxOrigem >= nMelhores) idxOrigem = nMelhores - 1; // segurança
-        
-        redes[i].setRede(melhores10[idxOrigem].getRede());
-        redes[i].ganho = 0;
-        redes[i].perda = 0;   // ou .perdas, dependendo do nome real
+// [NOVO] Função para gerenciar o Ranking Global (Hall da Fama)
+void atualizarMelhoresTodosOsTempos(const RedeNeural& campeaDaGeracao) {
+    // Adiciona a campeã na lista
+    melhores10TodosOsTempos.push_back(campeaDaGeracao);
+
+    // Ordena do melhor para o pior
+    std::sort(melhores10TodosOsTempos.begin(), melhores10TodosOsTempos.end(), eMelhor);
+
+    // Se tiver mais de 10, remove os piores (o que sobrou no final da lista)
+    if (melhores10TodosOsTempos.size() > 10) {
+        melhores10TodosOsTempos.resize(10);
     }
 }
 
-//TODO criar o loop principal de treinamento
-int main(){
-for (size_t geracao = 0; geracao < 10; geracao++) {
+// [MODIFICADO] Repovoa misturando Melhores da Geração + Melhores de Todos os Tempos
+void repovoarComEliteMista(std::vector<RedeNeural>& melhoresGeracao, std::vector<RedeNeural>& melhoresGlobal, std::vector<RedeNeural>& populacao)
+{
+    // Cria um vetor de pais contendo a união dos dois grupos
+    std::vector<RedeNeural> pais;
+    pais.reserve(melhoresGeracao.size() + melhoresGlobal.size());
 
+    // Adiciona os melhores desta geração
+    pais.insert(pais.end(), melhoresGeracao.begin(), melhoresGeracao.end());
 
-    // iniciar o loop de apostas
-for (size_t i = 0; i < 1000; i++) {
-    std::vector<float> entrada;
+    // Adiciona os melhores de todos os tempos
+    pais.insert(pais.end(), melhoresGlobal.begin(), melhoresGlobal.end());
+
+    // Segurança: se não houver pais (primeira rodada bugada?), não faz nada
+    if (pais.empty()) return;
+
+    const size_t popSize = populacao.size();
+    const size_t qtdPais = pais.size();
     
-    // Verifica se tem pelo menos 10 candles carregados
-    if (corretora.historicoNormalizado.size() < 10) {
-        std::cout << "Erro: só tem " << corretora.historicoNormalizado.size() 
-                << " candles. Precisa de no mínimo 10." << std::endl;
-        return 1;
+    // Distribui os genes dos pais para a população inteira (Round Robin)
+    for (size_t i = 0; i < popSize; ++i) {
+        // Usa o operador módulo (%) para rodar ciclicamente entre os pais disponíveis (sejam 10, 15 ou 20)
+        size_t idxPai = i % qtdPais;
+
+        populacao[i].setRede(pais[idxPai].getRede());
+        populacao[i].ganho = 0;
+        populacao[i].perda = 0;
     }
+}
 
-    // Cria o vetor de entrada com os últimos 10 candles (ou os 10 primeiros, você escolhe)
+int main(){
+    for (size_t geracao = 0; geracao < 10000; geracao++) { // Aumentei para loop infinito ou grande
 
-    for (size_t i = 0; i < 10; i++) {
-        const Candle& c = corretora.historicoNormalizado[i];  // <--- índices 0 a 9
-        entrada.push_back(c.abertura);
-        entrada.push_back(c.maxima);
-        entrada.push_back(c.minima);
-        entrada.push_back(c.fechamento);
-        entrada.push_back(c.volume);
-        entrada.push_back(c.trades);
-    }
+        // iniciar o loop de apostas
+        for (size_t i = 0; i < 10000; i++) {
+            std::vector<float> entrada;
+            
+            if (corretora.historicoNormalizado.size() < 10) {
+                std::cout << "Erro: histórico insuficiente." << std::endl;
+                return 1;
+            }
 
+            // Cria o vetor de entrada
+            for (size_t k = 0; k < 10; k++) {
+                // Ajuste de índice: pega os últimos candles disponíveis se o loop 'i' não estiver sincronizado com o histórico
+                // Assumindo que você quer sempre os ultimos 10 baseados num offset ou fixo. 
+                // Mantive sua lógica original de 0 a 9, mas cuidado: isso pega sempre os mesmos 10 candles estáticos se o histórico não andar.
+                const Candle& c = corretora.historicoNormalizado[k]; 
+                entrada.push_back(c.abertura);
+                entrada.push_back(c.maxima);
+                entrada.push_back(c.minima);
+                entrada.push_back(c.fechamento);
+                entrada.push_back(c.volume);
+                entrada.push_back(c.trades);
+            }
 
+            // Processamento das redes
+            for (size_t r = 0; r < redes.size(); r++) {
+                Resultado resultado = redes[r].iniciar(entrada);
 
-    // cada rede verifica se vai apostar ou não
-    for (size_t rede = 0; rede < redes.size(); rede++) {
-        Resultado resultado = redes[rede].iniciar(entrada);
+                bool s1 = resultado.resultado[0];
+                bool s2 = resultado.resultado[1];
 
-        if (resultado.resultado[0] == true && resultado.resultado[1] == true) {
-            // não faz nada
-        
-        }else if(resultado.resultado[0] == false && resultado.resultado[1] == false){
-            // não faz nada
-        }else if (resultado.resultado[0] == true && resultado.resultado[1] == false) {
-            //compra
-            corretora.apostar(rede, true);
-        }else if (resultado.resultado[0] == false && resultado.resultado[1] == true) {
-            // vende
-            corretora.apostar(rede, false);
+                if (s1 && !s2) {
+                    corretora.apostar(r, true); // Compra
+                } else if (!s1 && s2) {
+                    corretora.apostar(r, false); // Venda
+                }
+                // Casos s1==s2 (true/true ou false/false) não fazem nada
+            }
+
+            corretora.gerarResultado(redes);
+        }
+
+        // --- FIM DA GERAÇÃO ---
+
+        // 1. Pega os 10 melhores da geração atual
+        melhores10 = obterMelhores10(redes);
+
+        // 2. Atualiza o ranking global (Hall da Fama) apenas com o CAMPEÃO desta geração
+        if (!melhores10.empty()) {
+            atualizarMelhoresTodosOsTempos(melhores10[0]);
+        }
+
+        // 3. Repovoa a população usando os (até) 20 indivíduos de elite
+        repovoarComEliteMista(melhores10, melhores10TodosOsTempos, redes);
+
+        // 4. Aplica mutação na nova geração (exceto talvez nos clones puros se quiser elitismo puro, mas aqui aplica em todos)
+        for (RedeNeural& rede : redes) {
+            rede.mutacao();
+        }
+
+        system("clear");
+
+        float media = 0.0f;
+        if ((melhores10[0].ganho + melhores10[0].perda) > 0) {
+            media = ((float)melhores10[0].ganho / (melhores10[0].ganho + melhores10[0].perda)) * 100;
+        }
+
+        std::cout << "=== GERAÇÃO " << geracao << " ===" << std::endl;
+        std::cout << "Melhor da Geração - Ganhos: " << melhores10[0].ganho 
+                  << " | Perdas: " << melhores10[0].perda 
+                  << " | Taxa de Acerto: " << media << "%" << std::endl;
+
+        if (!melhores10TodosOsTempos.empty()) {
+            std::cout << "Melhor de Todos os Tempos - Ganhos: " << melhores10TodosOsTempos[0].ganho 
+                      << " | Perdas: " << melhores10TodosOsTempos[0].perda << std::endl;
         }
     }
-
-    // corretora da o resultado
-    corretora.gerarResultado(redes);
-
-}
-
-// pega as 10 melhores redes
-melhores10 = obterMelhores10(redes);
-repovoarComMelhores(melhores10, redes);
-
-// aplica mutação a nova geração
-for (RedeNeural rede : redes) {
-    rede.mutacao();
-}
-system("clear");
-
-float media;
-
-media = ( ( (float)melhores10[0].ganho / (melhores10[0].ganho + melhores10[0].perda)) * 100);
-
-std::cout << "melhor individuo da geracao: " << geracao << std::endl;
-std::cout << "ganhos: " << melhores10[0].ganho << std::endl;
-std::cout << "perdas: " << melhores10[0].perda << std::endl;
-std::cout << "media: " << media << std::endl;
-}
     return 0;
 }
