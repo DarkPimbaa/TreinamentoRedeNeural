@@ -1,0 +1,8 @@
+clean:
+	rm ./teste
+
+build:
+	nvcc main.cu includes/*.cpp -o teste
+
+run:
+	rm -f ./teste; nvcc main.cu includes/*.cpp -o teste && clear && ./teste

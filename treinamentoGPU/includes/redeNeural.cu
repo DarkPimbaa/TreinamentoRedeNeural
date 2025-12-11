@@ -47,7 +47,7 @@ public:
     int perda = 0;
     bool retorno[NUM_SAIDAS] = {false};
 
-    RedeNeural(){
+    __host__ RedeNeural(){
         iniciarPesos();
     };
 

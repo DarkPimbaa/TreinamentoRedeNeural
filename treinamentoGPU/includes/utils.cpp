@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <string>
 
 
 std::vector<Candle> lerCSV(const std::string& caminho) {
@@ -38,6 +39,52 @@ std::vector<Candle> lerCSV(const std::string& caminho) {
     }
 
     return dados;
+}
+
+/**
+ * @brief Carrega dados de um arquivo CSV diretamente na memória alocada por malloc.
+ * * @param caminho O caminho para o arquivo CSV.
+ * @param dados O ponteiro para o bloco de memória alocado (Candle*).
+ * @param tamanho_maximo O número máximo de Candles que o bloco 'dados' pode armazenar.
+ */
+void lerCSV_mallocc(const char* caminho, Candle* dados, size_t tamanho_maximo) {
+    std::ifstream file(caminho);
+    
+    if (!file.is_open()) {
+        return;
+    }
+
+    std::string linha;
+    std::getline(file, linha); // Ignora o cabeçalho
+
+    size_t i = 0;
+    while (std::getline(file, linha) && i < tamanho_maximo) {
+        std::stringstream ss(linha);
+        std::string coluna;
+        
+        // Usamos a notação de array (dados[i]) que é sintaticamente idêntica
+        // à aritmética de ponteiros (p.ex., *(dados + i)) quando se trabalha com malloc.
+        
+        std::getline(ss, coluna, ',');
+        dados[i].abertura = std::stof(coluna);
+
+        std::getline(ss, coluna, ',');
+        dados[i].maxima = std::stof(coluna);
+
+        std::getline(ss, coluna, ',');
+        dados[i].minima = std::stof(coluna);
+
+        std::getline(ss, coluna, ',');
+        dados[i].fechamento = std::stof(coluna);
+
+        std::getline(ss, coluna, ',');
+        dados[i].volume = std::stof(coluna);
+
+        std::getline(ss, coluna, ',');
+        dados[i].trades = std::stof(coluna);
+
+        i++;
+    }
 }
 
 

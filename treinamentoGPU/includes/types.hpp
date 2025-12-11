@@ -1,4 +1,4 @@
-
+#pragma once
 
 
 // representa um candle

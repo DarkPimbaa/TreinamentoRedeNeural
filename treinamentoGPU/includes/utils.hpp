@@ -25,3 +25,11 @@ public:
 
 //retorna o vetor de candles normalizado baseado na abetura do candle no ultimo indice do vetor
 std::vector<Candle> normalizarCandle(std::vector<Candle> candles);
+
+/**
+ * @brief Carrega dados de um arquivo CSV diretamente na memória alocada por malloc.
+ * @param caminho O caminho para o arquivo CSV.
+ * @param dados O ponteiro para o bloco de memória alocado (Candle*).
+ * @param tamanho_maximo O número máximo de Candles que o bloco 'dados' pode armazenar.
+ */
+void lerCSV_mallocc(const char* caminho, Candle* dados, size_t tamanho_maximo);
