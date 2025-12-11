@@ -3,7 +3,7 @@
 #define NUM_CAMADAS 5
 #define NUM_SAIDAS 2
 #define BIAS 1.f
-#define NUM_INDIVIDUOS 1000
+#define NUM_INDIVIDUOS 1000 // até 100mil se for 60 entradas e até 2mil se for 600 entradas
 
 #include <cstddef>
 #include "includes/redeNeural.cu"
@@ -11,7 +11,6 @@
 #include "includes/utils.hpp"
 #include <cstdlib>
 #include <cuda_runtime.h>
-#include <iostream>
 
 __global__ void treinamento(Candle* d_candles, RedeNeural* d_individuos, int n){
     int individuo = blockIdx.x;     // 0–999  || warps
@@ -43,13 +42,11 @@ int main(){
     cudaMalloc(&d_individuos, sizeIndividuos);
     cudaMemcpy(d_individuos, h_individuos, sizeIndividuos, cudaMemcpyHostToDevice);
 
-    //dim3 bloco(32);
-    //dim3 grid(1000);
+    dim3 bloco(32);
+    dim3 grid(NUM_INDIVIDUOS);
 
-    //treinamento<<<grid, bloco>>>(d_candles, d_individuos, NUM_INDIVIDUOS);
-    //cudaDeviceSynchronize();
-
-    std::cout << (sizeIndividuos / (1024 * 1024));
+    treinamento<<<grid, bloco>>>(d_candles, d_individuos, NUM_INDIVIDUOS);
+    cudaDeviceSynchronize();
 
     free(h_candles);
     delete[] h_individuos;

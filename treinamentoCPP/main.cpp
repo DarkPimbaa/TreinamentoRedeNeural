@@ -1,5 +1,4 @@
 #include "./includes/types.hpp"
-#include "./includes/utils.hpp"
 #include "./includes/corretora.cpp"
 #include <cstddef>
 #include <ostream>

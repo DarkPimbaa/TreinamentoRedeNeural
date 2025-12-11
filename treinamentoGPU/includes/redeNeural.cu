@@ -48,7 +48,7 @@ public:
     bool retorno[NUM_SAIDAS] = {false};
 
     __host__ RedeNeural(){
-        iniciarPesos();
+        //iniciarPesos();
     };
 
     // inicia os pesos com valores aleatorios
