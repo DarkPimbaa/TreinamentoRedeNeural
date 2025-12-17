@@ -8,10 +8,10 @@
 #include <iostream>
 
 // macros
-#define NUM_ENTRADAS 60
-#define NUM_CAMADAS 5
+#define NUM_ENTRADAS 600
+#define NUM_CAMADAS 4
 #define NUM_SAIDAS 2
-#define NUM_INDIVIDUOS 100
+#define NUM_INDIVIDUOS 1000
 
 // --- GLOBAIS ---
 
@@ -114,7 +114,7 @@ int main(){
     for (size_t geracao = 0; geracao < 10000; geracao++) { // Aumentei para loop infinito ou grande
 
         // iniciar o loop de apostas
-        for (size_t i = 0; i < 10000; i++) {
+        for (size_t i = 0; i < 1000; i++) {
             std::vector<float> entrada;
             
             if (corretora.historicoNormalizado.size() < 10) {
