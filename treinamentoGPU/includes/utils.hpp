@@ -28,6 +28,7 @@ public:
 // indice do vetor
 std::vector<Candle> normalizarCandle(std::vector<Candle> candles);
 
+
 /**
  * @brief Carrega dados de um arquivo CSV diretamente na memória alocada por
  * malloc.

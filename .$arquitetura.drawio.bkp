@@ -25,6 +25,9 @@
         <mxCell id="Un9YgfEguBIkcBsL297Y-9" value="kernel para mutar os pesos de saida, cada thread cuida de uma rede" style="whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="220" y="780" width="120" height="60" as="geometry" />
         </mxCell>
+        <mxCell id="Un9YgfEguBIkcBsL297Y-10" value="kernel que reseta a pontuação das redes" style="whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="460" y="290" width="120" height="60" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>

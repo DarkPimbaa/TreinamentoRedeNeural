@@ -19,12 +19,12 @@ struct Neuronio{
 };
 
 struct Bias{
-  const float valor = 1.f;
+  float valor = 1.f;
   __half pesos[NUM_ENTRADAS];
 };
 
 struct Camada{
-  Neuronio neuronio[NUM_CAMADAS];
+  Neuronio neuronio[NUM_ENTRADAS];
   Bias BIAS;
 };
 
@@ -44,6 +44,7 @@ public:
   bool bvivo = true;
   bool retorno[NUM_SAIDAS] = {false};
   int rodadasSemApostar = 0;
+  float taxaDeVitoria = 0.f;
 
   __host__ RedeNeural() {
     // iniciarPesos();
@@ -78,7 +79,7 @@ public:
   }
 
   // função que alimenta a primeira camada oculta
-  __device__ void inferenciaPrimeiraOculta(float* valoresNormalizados){
+  __device__ void inferenciaPrimeiraOculta(){
     int idx = threadIdx.x;
 
       // cada neuronio calcula seu valor
@@ -95,7 +96,7 @@ public:
   }
 
     // função chamada por camada, cada thread cuida de um neuronio. Utilizar em um loop de kernels(que vai iterar para cada camada) que chama um kernel que executa essa função
-  __device__ void inferenciaOculta(int camada = 1){
+  __device__ void inferenciaOculta(int camada){
     int idx = threadIdx.x;
 
       // cada neuronio calcula seu valor
@@ -109,6 +110,7 @@ public:
       if (rede.oculto[camada].neuronio[idx].valor < 0.f) {
         rede.oculto[camada].neuronio[idx].valor = 0.f;
       }
+      __syncthreads();
   }
 
   // faz a inferencia na camada de saida e já alimento o retorno e já cleana valores.
@@ -181,7 +183,7 @@ public:
 
   // muta os pesos dos neuronios de saida
   __device__ void mutarSaida(float por, curandState* state){
-    for (size_t neuronio = 0; neuronio < NUM_CAMADAS; neuronio++) {
+    for (size_t neuronio = 0; neuronio < NUM_SAIDAS; neuronio++) {
       for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
         float chance = curand_uniform(state);
         if (chance <= 0.10f) {
