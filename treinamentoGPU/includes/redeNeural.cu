@@ -93,6 +93,7 @@ public:
       if (rede.oculto[0].neuronio[idx].valor < 0.f) {
         rede.oculto[0].neuronio[idx].valor = 0.f;
       }
+      __syncthreads();
   }
 
     // função chamada por camada, cada thread cuida de um neuronio. Utilizar em um loop de kernels(que vai iterar para cada camada) que chama um kernel que executa essa função
@@ -155,6 +156,7 @@ public:
         }
       }
     }
+    __syncthreads();
   }
 
   // muta os pesos de todos os BIAS das camadas ocultas

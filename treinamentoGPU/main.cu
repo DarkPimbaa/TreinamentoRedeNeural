@@ -98,7 +98,7 @@ __global__ void kinferenciaSaida(RedeNeural *d_individuos, Candle *d_candle, int
       }
     }else{
       //nada
-      if ( d_individuos[idx].rodadasSemApostar == 100) {
+      if ( d_individuos[idx].rodadasSemApostar == 200) {
         d_individuos[idx].bvivo = false;
       }
       d_individuos[idx].rodadasSemApostar++;
@@ -141,6 +141,8 @@ __global__ void kresetPontuacao(RedeNeural *d_individuos){
 
 int main() {
   float taxaDoMelhorDaGeracaoAtual = 0;
+  int ganhos = 0;
+  int perdas = 0;
   size_t sizeCandle = (sizeof(Candle) * 964800);
   size_t sizeIndividuos = (sizeof(RedeNeural) * NUM_INDIVIDUOS);
 
@@ -201,9 +203,13 @@ int main() {
       }
 
       taxaDoMelhorDaGeracaoAtual = 0;
+      ganhos = 0;
+      perdas = 0;
       for (size_t melhor = 0; melhor < NUM_INDIVIDUOS; melhor++) {
         if (h_individuos[melhor].bvivo == true && h_individuos[melhor].taxaDeVitoria > taxaDoMelhorDaGeracaoAtual) {
           taxaDoMelhorDaGeracaoAtual = h_individuos[melhor].taxaDeVitoria;
+          ganhos = h_individuos[melhor].ganho;
+          perdas = h_individuos[melhor].perda;
         }
       }
       
@@ -223,9 +229,10 @@ int main() {
     }
 
     cudaMemcpy(d_individuos, h_individuos, sizeIndividuos, cudaMemcpyHostToDevice);
+    cudaDeviceSynchronize();
 
     //aplicar mutações;
-    float por = Rand::Float(0.05, 0.5);
+    float por = Rand::Float(0.2, 0.5);
     kmutarPesosOCultos<<<NUM_INDIVIDUOS,NUM_ENTRADAS>>>(d_individuos, por, d_estados);
     cudaDeviceSynchronize();
     kmutarBias<<<1,NUM_INDIVIDUOS>>>(d_individuos, por, d_estados);
@@ -244,13 +251,13 @@ int main() {
 
     printf("geração: %i \n", geracao);
     printf("taxa do melhor da geracao atual: %f \n", taxaDoMelhorDaGeracaoAtual);
+    printf("ganho do melhor da geracao atual: %i \n", ganhos);
+    printf("perda do melhor da geracao atual: %i \n", perdas);
     printf("taxa de vitória do melhor individuo: %f \n", h_melhorIndividuo->taxaDeVitoria);
     printf("---------------------------------------------------------- \n");
 
     geracao++;
   }
-
-  // TODO implementar a lógica de treino
 
   delete[] h_candles;
   delete[] h_individuos;
