@@ -12,6 +12,8 @@
 #include <cuda_runtime.h>
 #include <time.h>
 #include "./includes/utils.hpp"
+#include <chrono>
+#include <iostream>
 
 __global__ void initCurand(curandState *estados, unsigned long seed) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -137,7 +139,6 @@ __global__ void kresetPontuacao(RedeNeural *d_individuos){
   d_individuos[idx].taxaDeVitoria = 0.f;
 }
 
-// TODO fazer todos os kernels necessarios
 
 int main() {
   float taxaDoMelhorDaGeracaoAtual = 0;
@@ -169,7 +170,6 @@ int main() {
   cudaMalloc(&d_estados,NUM_INDIVIDUOS * sizeof(curandState)); // 1 por indivíduo
   initCurand<<<NUM_INDIVIDUOS, 1>>>(d_estados, time(NULL));
   cudaDeviceSynchronize();
-
   iniciarPesos<<<1, NUM_INDIVIDUOS>>>(d_individuos, NUM_INDIVIDUOS, d_estados);
   cudaDeviceSynchronize();
 
@@ -178,7 +178,7 @@ int main() {
   // loop de treinamento
   while (!bmetaAtingida) {
     // loop de inferencia
-    for (size_t rodada = NUM_ENTRADAS / 6; rodada < 5'000; rodada++) {
+    for (size_t rodada = NUM_ENTRADAS / 6; rodada < 10'000; rodada++) {
       knormalizarValores<<<1, NUM_ENTRADAS>>>(d_candles, rodada, d_valoresNormalizados);
       cudaDeviceSynchronize();
       kalimentarEntrada<<<1, NUM_INDIVIDUOS>>>(d_individuos, d_valoresNormalizados, NUM_INDIVIDUOS);
@@ -232,7 +232,7 @@ int main() {
     cudaDeviceSynchronize();
 
     //aplicar mutações;
-    float por = Rand::Float(0.2, 0.5);
+    float por = Rand::Float(0.1, 0.5);
     kmutarPesosOCultos<<<NUM_INDIVIDUOS,NUM_ENTRADAS>>>(d_individuos, por, d_estados);
     cudaDeviceSynchronize();
     kmutarBias<<<1,NUM_INDIVIDUOS>>>(d_individuos, por, d_estados);
