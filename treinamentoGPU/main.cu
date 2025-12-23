@@ -1,4 +1,4 @@
-#define NUM_ENTRADAS 64 // 100 candles * 6 params + 4 extras
+#define NUM_ENTRADAS 604 // 100 candles * 6 params + 4 extras
 #define NUM_CAMADAS 4
 #define NUM_SAIDAS 2
 #define BIAS 1.f
@@ -7,7 +7,7 @@
 #define MAXIMO_RODADAS_SEM_JOGAR 100
 #define QUANTOS_CANDLES_POR_GERACAO 2'000
 #define PORMIN 0.01 // Taxa de mutação minima
-#define PORMAX 0.5 // Taxa de mutação maxima
+#define PORMAX 0.2 // Taxa de mutação maxima
 
 
 //* INCLUDES
@@ -88,7 +88,7 @@ Rede carregarRedeJSON(const char* arquivo) {
     };
 
     __global__ void kiniciarPesos(curandState* states, RedeNeural* d_individuos){
-        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        int idx = blockIdx.x;
         if (idx < NUM_INDIVIDUOS) {
             d_individuos[idx].iniciarPesos(states);
         }
@@ -127,15 +127,15 @@ Rede carregarRedeJSON(const char* arquivo) {
 
     // muta os pesos das redes thread/rede
     __global__ void kmutarPesos(RedeNeural *d_individuos, __half por, curandState *d_states){ 
-        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        int idx = blockIdx.x;
         if (idx < NUM_INDIVIDUOS) {
             d_individuos[idx].mutarPesos(por, d_states);
         }
     };
 
-    // verifica se o individuo ganhou na rodada anterior e adiciona a pontuação a ele se estiver vivo, thread/rede
+    // verifica se o individuo ganhou na rodada anterior e adiciona a pontuação a ele se estiver vivo, block/rede
     __global__ void kverificarDecisao(RedeNeural * d_individuos, Candle *d_candles, int indiceAtual){
-        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        int idx = blockIdx.x;
 
         if (idx < NUM_INDIVIDUOS) {
             if (d_individuos[idx].bvivo == true) {
@@ -286,7 +286,7 @@ int main(){
     cudaMalloc(&d_individuos, sizeof(RedeNeural) * NUM_INDIVIDUOS);
     cudaMemcpy(d_individuos, h_individuos, sizeof(RedeNeural) * NUM_INDIVIDUOS, cudaMemcpyHostToDevice);
     
-    kiniciarPesos<<<1, NUM_INDIVIDUOS>>>(d_states, d_individuos);
+    kiniciarPesos<<<NUM_INDIVIDUOS, 1>>>(d_states, d_individuos);
     cudaDeviceSynchronize();
 
     bool* h_brun = new bool(true);
@@ -310,7 +310,7 @@ int main(){
             kinferencia<<<NUM_INDIVIDUOS, NUM_ENTRADAS>>>(d_valores, d_individuos);
             cudaDeviceSynchronize();
 
-            kverificarDecisao<<<1, NUM_INDIVIDUOS>>>(d_individuos, d_candles, rodada);
+            kverificarDecisao<<<NUM_INDIVIDUOS, 1>>>(d_individuos, d_candles, rodada);
             cudaDeviceSynchronize();
         }
         
@@ -321,7 +321,7 @@ int main(){
         kPropagarMelhor<<<1, 32>>>(d_individuos, d_melhor);
         cudaDeviceSynchronize();
 
-        kmutarPesos<<<1,NUM_INDIVIDUOS>>>(d_individuos, Rand::Float(PORMIN, PORMAX), d_states);
+        kmutarPesos<<<NUM_INDIVIDUOS,1>>>(d_individuos, Rand::Float(PORMIN, PORMAX), d_states);
         cudaDeviceSynchronize();
 
         cudaMemcpy(h_brun, d_brun, sizeof(bool), cudaMemcpyDeviceToHost);
