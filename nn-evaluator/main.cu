@@ -139,7 +139,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Backlog, idxAtual, quantidadeDeEntradas, entr
                             d_backlog->entradas[d_backlog->idxAtual].decisao = Decisao::COMPROU;
                             d_backlog->entradas[d_backlog->idxAtual].indiceDaEntrada = indiceAtual;
                             d_backlog->idxAtual++;
-                            printf("comprou \n");
                         }else {
                             d_individuos[idx].perda++;
                             d_individuos[idx].partidaSemJogar = 0;
@@ -147,7 +146,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Backlog, idxAtual, quantidadeDeEntradas, entr
                             d_backlog->entradas[d_backlog->idxAtual].decisao = Decisao::COMPROU;
                             d_backlog->entradas[d_backlog->idxAtual].indiceDaEntrada = indiceAtual;
                             d_backlog->idxAtual++;
-                            printf("comprou \n");
                         }
                     break;
 
@@ -160,7 +158,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Backlog, idxAtual, quantidadeDeEntradas, entr
                             d_backlog->entradas[d_backlog->idxAtual].decisao = Decisao::VENDEU;
                             d_backlog->entradas[d_backlog->idxAtual].indiceDaEntrada = indiceAtual;
                             d_backlog->idxAtual++;
-                            printf("vendeu \n");
                         }else {
                             d_individuos[idx].perda++;
                             d_individuos[idx].partidaSemJogar = 0;
@@ -168,12 +165,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Backlog, idxAtual, quantidadeDeEntradas, entr
                             d_backlog->entradas[d_backlog->idxAtual].decisao = Decisao::VENDEU;
                             d_backlog->entradas[d_backlog->idxAtual].indiceDaEntrada = indiceAtual;
                             d_backlog->idxAtual++;
-                            printf("vendeu \n");
                         }
                     break;
 
                     case Decisao::NADA:
-                        printf("nada\n");
                     break;
                 }
             
@@ -245,7 +240,7 @@ int main(){
         int startRodada = numCandlesHist + 10; // margem de segurança // com 604 entradas começa no candle 110
         if (startRodada < 20) startRodada = 20;
 
-        for (size_t rodada = startRodada; rodada < QUANTOS_CANDLES_POR_GERACAO + 2; rodada++) {
+        for (size_t rodada = startRodada; rodada < QUANTOS_CANDLES_POR_GERACAO; rodada++) {
             knormalizar<<<1,32>>>(d_candles, rodada, d_valores);
             cudaDeviceSynchronize(); 
             kinferencia<<<1, NUM_ENTRADAS>>>(d_valores, d_individuos);
