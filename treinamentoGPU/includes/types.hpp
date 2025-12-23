@@ -8,4 +8,8 @@ struct Candle {
   float fechamento;
   float volume;
   float trades;
+  float mm7;
+  float mm21;
+  float mm50;
+  float rsi14;
 };

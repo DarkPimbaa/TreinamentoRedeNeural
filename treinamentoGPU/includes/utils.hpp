@@ -38,3 +38,4 @@ std::vector<Candle> normalizarCandle(std::vector<Candle> candles);
  * armazenar.
  */
 void lerCSV_mallocc(const char *caminho, Candle *dados, size_t tamanho_maximo);
+void lerCSV_malloccNovo(const char *caminho, Candle *dados, size_t tamanho_maximo);

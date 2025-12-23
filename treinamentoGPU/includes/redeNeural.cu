@@ -1,10 +1,11 @@
 #include <cstddef>
+#include <cstdint>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
 
 #ifndef NUM_ENTRADAS
-#define NUM_ENTRADAS 60 // 60 floats, 60 neuronios + 1 bias;
+#define NUM_ENTRADAS 64 // multiplos de 32, 64 neuronios + 1 bias;
 #endif
 #ifndef NUM_CAMADAS
 #define NUM_CAMADAS 4
@@ -12,219 +13,226 @@
 #ifndef NUM_SAIDAS
 #define NUM_SAIDAS 2
 #endif
+#ifndef BIAS
+#define BIAS 1.f
+#endif
 
-struct Neuronio{
-  float valor = 0.f;
-  __half pesos[NUM_ENTRADAS] = {0};
-};
-
-struct Bias{
-  float valor = 1.f;
-  __half pesos[NUM_ENTRADAS];
-};
-
-struct Camada{
-  Neuronio neuronio[NUM_ENTRADAS];
-  Bias BIAS;
-};
 
 struct Rede{
-  float entrada[NUM_ENTRADAS] = {0.f};
-  Camada oculto[NUM_CAMADAS];
-  Neuronio saida[NUM_SAIDAS];
-  bool retorno[NUM_SAIDAS];
+  __half pesos[NUM_CAMADAS][NUM_ENTRADAS][NUM_ENTRADAS];
+  __half bias[NUM_CAMADAS][NUM_ENTRADAS];
+  __half saida[NUM_SAIDAS][NUM_ENTRADAS];
 };
 
-// rede neural
-class RedeNeural {
-public:
+enum Decisao{
+  COMPROU, // comprou
+  VENDEU, // vendeu
+  NADA // não jogou na rodada anterior
+};
+
+struct RedeNeural{
   Rede rede;
-  int ganho = 0;
-  int perda = 0;
-  bool bvivo = true;
-  bool retorno[NUM_SAIDAS] = {false};
-  int rodadasSemApostar = 0;
-  float taxaDeVitoria = 0.f;
+  uint16_t ganho; // de 0 até 65k
+  uint16_t perda; // de 0 até 65k
+  uint16_t partidaSemJogar;
+  float taxaVitoria;
+  bool bvivo;
+  uint8_t resultado[NUM_SAIDAS]; // resultado da inferencia anterior
 
-  __host__ RedeNeural() {
-    // iniciarPesos();
-  };
-
-  __device__ float randDevice(curandState *state) {
-    // número aleatório uniformemente distribuído entre -1 e 1
-    return curand_uniform(state) * 2.f - 1.f;
+  __device__ __host__ void init(){
+    ganho = 0;
+    perda = 0;
+    partidaSemJogar = 0;
+    bvivo = true;
+    taxaVitoria = 0;
   }
 
-  // inicia os pesos da rede incluindo BIAS
-  __device__ void iniciarPesosDevice(Rede &rede, curandState *estados) {
-    
-    // inicia os pesos das camadas ocultas + BIAS
-    for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {
-      for (size_t neuronio = 0; neuronio < NUM_ENTRADAS; neuronio++){
-        for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
-          rede.oculto[camada].neuronio[neuronio].pesos[peso] = __float2half(randDevice(estados));
-          rede.oculto[camada].BIAS.pesos[peso] = __float2half(randDevice(estados));
-        }
-      }
+  __device__ float attTaxa(){
+    int total = ganho + perda;
+    if (total == 0) {
+    taxaVitoria = 0.0f;
+    return taxaVitoria;
     }
-
-
-    // inicia os pesos da camada de saida
-    for (size_t neuronio = 0; neuronio < NUM_SAIDAS; neuronio++){
-      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
-        rede.saida[neuronio].pesos[peso] = __float2half(randDevice(estados));
-      }
-    }
-
+    taxaVitoria = ((float)ganho / total) * 100;
+    return taxaVitoria;
   }
 
-  // função que alimenta a primeira camada oculta
-  __device__ void inferenciaPrimeiraOculta(){
-    int idx = threadIdx.x;
+  /**
+   * @brief inicia os pesos de toda a rede, ideal usar um kernel thread/rede
+   * 
+   * @param states curandStates*
+   */
+  __device__ void iniciarPesos(curandState *states){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    init();
 
-      // cada neuronio calcula seu valor
-      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
-        rede.oculto[0].neuronio[idx].valor += rede.entrada[peso] * __half2float(rede.oculto[0].neuronio[idx].pesos[peso]);
-      }
-
-      rede.oculto[0].neuronio[idx].valor += rede.oculto[0].BIAS.valor * __half2float(rede.oculto[0].BIAS.pesos[idx]);
-
-      //ReLu
-      if (rede.oculto[0].neuronio[idx].valor < 0.f) {
-        rede.oculto[0].neuronio[idx].valor = 0.f;
-      }
-      __syncthreads();
-  }
-
-    // função chamada por camada, cada thread cuida de um neuronio. Utilizar em um loop de kernels(que vai iterar para cada camada) que chama um kernel que executa essa função
-  __device__ void inferenciaOculta(int camada){
-    int idx = threadIdx.x;
-
-      // cada neuronio calcula seu valor
-      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
-        rede.oculto[camada].neuronio[idx].valor += rede.oculto[camada - 1].neuronio[peso].valor * __half2float(rede.oculto[camada].neuronio[idx].pesos[peso]);
-      }
-
-      rede.oculto[camada].neuronio[idx].valor += rede.oculto[camada].BIAS.valor * __half2float(rede.oculto[camada].BIAS.pesos[idx]);
-
-      //ReLu
-      if (rede.oculto[camada].neuronio[idx].valor < 0.f) {
-        rede.oculto[camada].neuronio[idx].valor = 0.f;
-      }
-      __syncthreads();
-  }
-
-  // faz a inferencia na camada de saida e já alimento o retorno e já cleana valores.
-  __device__ void inferenciaSaida(){
-
-    for (size_t neuronio = 0; neuronio < NUM_SAIDAS; neuronio++) {
-      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
-        rede.saida[neuronio].valor += rede.oculto[NUM_CAMADAS - 1].neuronio[peso].valor * __half2float(rede.saida[neuronio].pesos[peso]);
-      }
-
-      //ReLu
-      if (rede.saida[neuronio].valor < 0.f) {
-        retorno[neuronio] = false;
-      }else {
-        retorno[neuronio] = true;
-      }
-
-    }
-
-    clearValores();
-
-
-  }
-  
-  // tem 10% de chance de mutar um peso aleatoriamente para cima ou para baixo, limitado entre -1.f e 1.f. Usar dentro de um kernel que vai iterar em cada camada
-  __device__ void mutacaoDeviceOculta(float por, curandState *state, int camada) {
-    int idx = threadIdx.x;
-
-    for (size_t i = 0; i < NUM_ENTRADAS; i++) {
-      float chance = curand_uniform(state);
-      if (chance <= 0.10f) {
-        if (chance <=0.50f) {
-          rede.oculto[camada].neuronio[idx].pesos[i] += __float2half(por);
-        }else{
-          rede.oculto[camada].neuronio[idx].pesos[i] -= __float2half(por);
-        }
-
-        if (rede.oculto[camada].neuronio[idx].pesos[i] < __float2half(-1.f)) { // se for menor que -1 = 1
-          rede.oculto[camada].neuronio[idx].pesos[i] = __float2half(-1.f);
-        }else if(rede.oculto[camada].neuronio[idx].pesos[i] > __float2half(1.f)){ // se for maior que 1 = 1
-          rede.oculto[camada].neuronio[idx].pesos[i] = __float2half(1.f);
-        }
-      }
-    }
-    __syncthreads();
-  }
-
-  // muta os pesos de todos os BIAS das camadas ocultas
-  __device__ void mutarBias(float por, curandState* state){
-    for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {
-      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
-        float chance = curand_uniform(state);
-        if (chance <= 0.10f) {
-          //muta
-          if (chance <= 0.50f) {
-            rede.oculto[camada].BIAS.pesos[peso] += __float2half(por);
-          }else {
-            rede.oculto[camada].BIAS.pesos[peso] -= __float2half(por);
-          }
-
-          // limite
-          if (rede.oculto[camada].BIAS.pesos[peso] > __float2half(1.0)) {
-            rede.oculto[camada].BIAS.pesos[peso] = __float2half(1.f);
-          }else if(rede.oculto[camada].BIAS.pesos[peso] < __float2half(-1.f)){
-            rede.oculto[camada].BIAS.pesos[peso] = __float2half(-1.f);
-          }
-        }
-      }
-    }
-  }
-
-  // muta os pesos dos neuronios de saida
-  __device__ void mutarSaida(float por, curandState* state){
-    for (size_t neuronio = 0; neuronio < NUM_SAIDAS; neuronio++) {
-      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
-        float chance = curand_uniform(state);
-        if (chance <= 0.10f) {
-          //muta
-          if (chance <= 0.50f) {
-            rede.saida[neuronio].pesos[peso] += __float2half(por);
-          }else {
-            rede.saida[neuronio].pesos[peso] -= __float2half(por);
-          }
-
-          // limite
-          if (rede.saida[neuronio].pesos[peso] > __float2half(1.0)) {
-            rede.saida[neuronio].pesos[peso] = __float2half(1.f);
-          }else if(rede.saida[neuronio].pesos[peso] < __float2half(-1.f)){
-            rede.saida[neuronio].pesos[peso] = __float2half(-1.f);
-          }
-        }
-      }
-    }
-  }
-
-  // zera os valores de toda a rede. Cada thread pode fazer isso individualmente
-  __device__ void clearValores() {
-
-    // loop de entrada
-    for (size_t i = 0; i < NUM_ENTRADAS; i++) {
-      rede.entrada[i] = 0.f;
-    }
-
-    // loop das camadas ocultas
+    // gera os pesos de pesos[][][]
     for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {
       for (size_t neuronio = 0; neuronio < NUM_ENTRADAS; neuronio++) {
-        rede.oculto[camada].neuronio[neuronio].valor = 0.f;
+        for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+          rede.pesos[camada][neuronio][peso] = ((curand_uniform(&states[i]) * 2.f) - 1.f);
+        }
       }
     }
 
-    // loop neuronios de saida
-    for (size_t neuronio = 0; neuronio < NUM_SAIDAS; neuronio++) {
-      rede.saida[neuronio].valor = 0.f;
+    // gera os pesos de bias[][]
+    for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {
+      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+        rede.bias[camada][peso] = ((curand_uniform(&states[i]) * 2.f) - 1.f);
+      }
     }
-  };
+
+    // gera os pesos de saida[][]
+    for (size_t neuronio = 0; neuronio < NUM_SAIDAS; neuronio++) {
+      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+        rede.saida[neuronio][peso] = ((curand_uniform(&states[i]) * 2.f) - 1.f);
+      }
+    }
+    //__syncthreads();
+  }
+
+  /**
+   * @brief faz a inferencia na rede ideal block/rede
+   * 
+   * @param valores array com os valores normalizados
+   * @param tamanhoDeValores tamanho do array valores
+   * @return bool* retorna um array de boleanos
+   */
+  __device__ void inferencia(__half *valores, uint8_t camada){
+    int idx = threadIdx.x;
+
+    if (idx >= NUM_ENTRADAS) return;
+
+    __half valor = 0.0;
+    for (uint16_t i = 0; i < NUM_ENTRADAS; i++) {
+      valor += valores[i] * rede.pesos[camada][i][idx];
+    }
+
+    valor += __float2half(BIAS * __half2float(rede.bias[camada][idx]));
+
+    //ReLu
+    if (__half2float(valor) < 0.f){
+      valor = 0.0;
+    }
+
+    __syncthreads();
+    valores[idx] = valor;
+
+  }
+
+  /**
+   * @brief calcula os valores nos neuronios de saida e da uma retorno, utilizar no mesmo kernel de inferencia();
+   * 
+   * @param retorno ponteiro com o retorno
+   * @param valores array de valores
+   */
+  __device__ void saida(bool* retorno, __half *valores){
+    int idx = threadIdx.x;
+
+    if (idx >= NUM_ENTRADAS) return;
+
+    if(idx < NUM_SAIDAS){ // nesse caso só as duas primeiras threads calculam.
+
+      __half valor = 0.0;
+    
+      for (size_t i = 0; i < NUM_ENTRADAS; i++) {
+        valor += valores[i] * rede.saida[idx][i];      
+      }
+
+      //ReLu
+      if (__half2float(valor) < 0.f){
+        retorno[idx] = false;
+      }else {
+      retorno[idx] = true;
+      }
+    }
+    
+
+  }
+
+  /**
+   * @brief muta 10% dos pesos da rede para mais ou para menos dentro do limite de -1 a 1, ideal kernel thread/rede
+   * 
+   * @param por valor de mutação
+   * @param states estados curand para números aleatórios
+   */
+  __device__ void mutarPesos(__half por, curandState *states){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    // muta os pesos de pesos[][][]
+    for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {
+      for (size_t neuronio = 0; neuronio < NUM_ENTRADAS; neuronio++) {
+        for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+
+          if (curand_uniform(&states[i]) <= 0.1f) { // 10% chance
+            if (curand_uniform(&states[i]) <= 0.5f) { // 50% chance
+              rede.pesos[camada][neuronio][peso] += por;
+              if (__half2float(rede.pesos[camada][neuronio][peso]) > 1.f) {
+                rede.pesos[camada][neuronio][peso] = 1.0;
+              }
+            }else{
+              rede.pesos[camada][neuronio][peso] -= por;
+              if (__half2float(rede.pesos[camada][neuronio][peso]) < -1.f) {
+                rede.pesos[camada][neuronio][peso] = -1.0;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    //muta pesos de bias[][]
+    for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {
+      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+
+        if (curand_uniform(&states[i]) <= 0.1f) { // 10% chance
+          if (curand_uniform(&states[i]) <= 0.5f) { // 50% chance
+            rede.bias[camada][peso] += por;
+            if (__half2float(rede.bias[camada][peso]) > 1.f) {
+              rede.bias[camada][peso] = 1.0;
+            }
+          }else{
+            rede.bias[camada][peso] -= por;
+            if (__half2float(rede.bias[camada][peso]) < -1.f) {
+              rede.bias[camada][peso] = -1.0;
+            }
+          }
+        }
+      }
+    }
+
+    //muta os pesos de saida[][]
+    for (size_t neuronio = 0; neuronio < NUM_SAIDAS; neuronio++) {
+      for (size_t peso = 0; peso < NUM_ENTRADAS; peso++) {
+
+        if (curand_uniform(&states[i]) <= 0.1f) { // 10% chance
+          if (curand_uniform(&states[i]) <= 0.5f) { // 50% chance
+            rede.saida[neuronio][peso] += por;
+            if (__half2float(rede.saida[neuronio][peso]) > 1.f) {
+              rede.saida[neuronio][peso] = 1.0;
+            }
+          }else{
+            rede.saida[neuronio][peso] -= por;
+            if (__half2float(rede.saida[neuronio][peso]) < -1.f) {
+              rede.saida[neuronio][peso] = -1.0;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * @brief Verifica qual foi a decisão do individuo na rodada enterior
+   * 
+   * @return Decisao uma enum com 3 valores possiveis
+   */
+  __device__ Decisao comprouOuVendeu(){
+    if (resultado[0] == true && resultado[1] == false) {
+      return Decisao::COMPROU;
+    }else if(resultado[0] == false && resultado[1] == true){
+      return Decisao::VENDEU;
+    }else{
+      return Decisao::NADA;
+    }
+  }
 };

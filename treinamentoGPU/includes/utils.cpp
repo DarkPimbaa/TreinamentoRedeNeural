@@ -89,6 +89,41 @@ void lerCSV_mallocc(const char *caminho, Candle *dados, size_t tamanho_maximo) {
     i++;
   }
 }
+void lerCSV_malloccNovo(const char *caminho, Candle *dados, size_t tamanho_maximo) {
+  std::ifstream file(caminho);
+
+  if (!file.is_open()) {
+    return;
+  }
+
+  std::string linha;
+  // 1. Ignora o cabeçalho
+  if (!std::getline(file, linha)) return; 
+
+  size_t i = 0;
+  while (i < tamanho_maximo && std::getline(file, linha)) {
+    if (linha.empty()) continue;
+
+    std::stringstream ss(linha);
+    std::string coluna;
+
+    // A ordem segue exatamente a sua struct Candle
+    std::getline(ss, coluna, ','); dados[i].abertura   = std::stof(coluna);
+    std::getline(ss, coluna, ','); dados[i].maxima     = std::stof(coluna);
+    std::getline(ss, coluna, ','); dados[i].minima     = std::stof(coluna);
+    std::getline(ss, coluna, ','); dados[i].fechamento = std::stof(coluna);
+    std::getline(ss, coluna, ','); dados[i].volume     = std::stof(coluna);
+    std::getline(ss, coluna, ','); dados[i].trades     = std::stof(coluna);
+    
+    // As novas 4 colunas de indicadores
+    std::getline(ss, coluna, ','); dados[i].mm7        = std::stof(coluna);
+    std::getline(ss, coluna, ','); dados[i].mm21       = std::stof(coluna);
+    std::getline(ss, coluna, ','); dados[i].mm50       = std::stof(coluna);
+    std::getline(ss, coluna, ','); dados[i].rsi14      = std::stof(coluna);
+
+    i++;
+  }
+}
 
 // Inteiro entre min e max (inclusive)
 int Rand::Int(int min, int max) {
