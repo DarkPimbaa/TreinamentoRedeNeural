@@ -4,7 +4,7 @@
 #define BIAS 1.f
 #define NUM_INDIVIDUOS 1000 // Testando com > 1024
 #define META_TAXA_VITORIA 60
-#define MAXIMO_RODADAS_SEM_JOGAR 100
+#define MAXIMO_RODADAS_SEM_JOGAR 50
 #define QUANTOS_CANDLES_POR_GERACAO 2'000
 #define PORMIN 0.01 // Taxa de mutação minima
 #define PORMAX 0.2 // Taxa de mutação maxima
@@ -44,6 +44,7 @@ void salvarRedeJSON(const Rede& r, const char* arquivo) {
 
     std::ofstream out(arquivo);
     out << j.dump(2);
+    printf("arquivo salvo!");
 #endif
 }
 
@@ -88,7 +89,7 @@ Rede carregarRedeJSON(const char* arquivo) {
     };
 
     __global__ void kiniciarPesos(curandState* states, RedeNeural* d_individuos){
-        int idx = blockIdx.x;
+        int idx = threadIdx.x;
         if (idx < NUM_INDIVIDUOS) {
             d_individuos[idx].iniciarPesos(states);
         }
@@ -144,7 +145,7 @@ Rede carregarRedeJSON(const char* arquivo) {
 
                 switch (r) {
                     case Decisao::COMPROU:
-                        if (d_candles[indiceAtual].fechamento < d_candles[indiceAtual + 1].fechamento) {
+                        if (d_candles[indiceAtual].fechamento < d_candles[indiceAtual + 2].fechamento) {
                             // ganhou
                             d_individuos[idx].ganho++;
                             d_individuos[idx].partidaSemJogar = 0;
@@ -155,7 +156,7 @@ Rede carregarRedeJSON(const char* arquivo) {
                     break;
 
                     case Decisao::VENDEU:
-                        if (d_candles[indiceAtual].fechamento > d_candles[indiceAtual + 1].fechamento) {
+                        if (d_candles[indiceAtual].fechamento > d_candles[indiceAtual + 2].fechamento) {
                             // ganhou
                             d_individuos[idx].ganho++;
                             d_individuos[idx].partidaSemJogar = 0;
@@ -286,7 +287,7 @@ int main(){
     cudaMalloc(&d_individuos, sizeof(RedeNeural) * NUM_INDIVIDUOS);
     cudaMemcpy(d_individuos, h_individuos, sizeof(RedeNeural) * NUM_INDIVIDUOS, cudaMemcpyHostToDevice);
     
-    kiniciarPesos<<<NUM_INDIVIDUOS, 1>>>(d_states, d_individuos);
+    kiniciarPesos<<<1, NUM_INDIVIDUOS>>>(d_states, d_individuos);
     cudaDeviceSynchronize();
 
     bool* h_brun = new bool(true);
@@ -301,7 +302,7 @@ int main(){
         
         // Calculando quantos candles precisamos para trás
         int numCandlesHist = (NUM_ENTRADAS - 4) / 6;
-        int startRodada = numCandlesHist + 10; // margem de segurança
+        int startRodada = numCandlesHist + 10; // margem de segurança // com 604 entradas começa no candle 110
         if (startRodada < 20) startRodada = 20;
 
         for (size_t rodada = startRodada; rodada < QUANTOS_CANDLES_POR_GERACAO; rodada++) {
@@ -329,7 +330,7 @@ int main(){
     }
 
     cudaMemcpy(h_melhor, d_melhor, sizeof(RedeNeural), cudaMemcpyDeviceToHost);
-    salvarRedeJSON(h_melhor->rede, "teste.json");
+    salvarRedeJSON(h_melhor->rede, "melhor.json");
 
 
     //* zona de liberar memoria------------------------
