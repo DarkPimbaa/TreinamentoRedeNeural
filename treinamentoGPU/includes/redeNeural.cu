@@ -63,8 +63,7 @@ struct RedeNeural{
    * @param states curandStates*
    */
   __device__ void iniciarPesos(curandState *states){
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    init();
+    int i = threadIdx.x;
 
     // gera os pesos de pesos[][][]
     for (size_t camada = 0; camada < NUM_CAMADAS; camada++) {

@@ -5,9 +5,9 @@
 #define NUM_INDIVIDUOS 1000 // Testando com > 1024
 #define META_TAXA_VITORIA 60
 #define MAXIMO_RODADAS_SEM_JOGAR 50
-#define QUANTOS_CANDLES_POR_GERACAO 2'000
-#define PORMIN 0.01 // Taxa de mutação minima
-#define PORMAX 0.2 // Taxa de mutação maxima
+#define QUANTOS_CANDLES_POR_GERACAO 10'000
+#define PORMIN 0.001 // Taxa de mutação minima
+#define PORMAX 0.5 // Taxa de mutação maxima
 
 
 //* INCLUDES
@@ -91,6 +91,7 @@ Rede carregarRedeJSON(const char* arquivo) {
     __global__ void kiniciarPesos(curandState* states, RedeNeural* d_individuos){
         int idx = threadIdx.x;
         if (idx < NUM_INDIVIDUOS) {
+            d_individuos[idx].init();
             d_individuos[idx].iniciarPesos(states);
         }
     };
@@ -145,7 +146,7 @@ Rede carregarRedeJSON(const char* arquivo) {
 
                 switch (r) {
                     case Decisao::COMPROU:
-                        if (d_candles[indiceAtual].fechamento < d_candles[indiceAtual + 2].fechamento) {
+                        if ((d_candles[indiceAtual].fechamento + (d_candles[indiceAtual].fechamento * 0.1)) < d_candles[indiceAtual + 5].fechamento) {
                             // ganhou
                             d_individuos[idx].ganho++;
                             d_individuos[idx].partidaSemJogar = 0;
@@ -156,7 +157,7 @@ Rede carregarRedeJSON(const char* arquivo) {
                     break;
 
                     case Decisao::VENDEU:
-                        if (d_candles[indiceAtual].fechamento > d_candles[indiceAtual + 2].fechamento) {
+                        if (d_candles[indiceAtual].fechamento - (d_candles[indiceAtual].fechamento * 0.1) > d_candles[indiceAtual + 5].fechamento) {
                             // ganhou
                             d_individuos[idx].ganho++;
                             d_individuos[idx].partidaSemJogar = 0;
