@@ -235,6 +235,8 @@ __global__ void verificarMelhor(Individuo *d_individuos, int *d_melhor){
             }
         }
         printf("Taxa de vitoria do melhor individuo: %f\n",d_individuos[*d_melhor].taxaVitoria);
+        printf("Ganho do melhor individuo: %i\n",d_individuos[*d_melhor].ganho);
+        printf("perda do melhor individuo: %i\n",d_individuos[*d_melhor].perda);
     }
 };
 
