@@ -213,10 +213,11 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
             //compra
             if (CandleAtualFechamento < CandleDaFrenteFechamento) {
                 atomicAdd(&d_individuos[idx].ganho, 1);
-            } else {
-                // Empate ou queda = perda (else já cobre o caso ==)
+            } else if (CandleAtualFechamento > CandleDaFrenteFechamento) {
+                // Queda = perda (empate não conta)
                 atomicAdd(&d_individuos[idx].perda, 1);
             }
+            // Se == não faz nada (empate neutro)
             
             // Fez trade: reseta contador de inatividade
             d_individuos[idx].rodadasSemTrade = 0;
@@ -224,10 +225,11 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
             //venda
             if (CandleAtualFechamento > CandleDaFrenteFechamento) {
                 atomicAdd(&d_individuos[idx].ganho, 1);
-            } else {
-                // Empate ou subida = perda (else já cobre o caso ==)
+            } else if (CandleAtualFechamento < CandleDaFrenteFechamento) {
+                // Subida = perda (empate não conta)
                 atomicAdd(&d_individuos[idx].perda, 1);
             }
+            // Se == não faz nada (empate neutro)
             
             // Fez trade: reseta contador de inatividade
             d_individuos[idx].rodadasSemTrade = 0;
