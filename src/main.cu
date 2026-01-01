@@ -1,9 +1,9 @@
-#define NUM_INDIVIDUOS 5000
+#define NUM_INDIVIDUOS 2000
 #define NUM_CAMADAS 4
 #define NUM_NEURONIOS 608 // multiplo de 16
 #define NUM_SAIDAS 2
 #define TEMPO_TREINAMENTO 60.0 // tempo total de treinamento em minutos
-#define NUM_CANDLES_BATCH 10'000 // numero de candles que cada individuo vai "apostar" antes da verificação
+#define NUM_CANDLES_BATCH 20'000 // numero de candles que cada individuo vai "apostar" antes da verificação
 #define TAMANHO_BTCCSV 954620
 
 #define loopGeracao(x) while(x)
