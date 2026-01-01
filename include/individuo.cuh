@@ -86,39 +86,6 @@ struct IndividuosPesos {
 __global__ void AddBiasAndRelu(__half* dados, const __half* bias, int size) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
-        // Calculate bias index taking broadcasting into account.
-        // We assume 'dados' layout is [Individuo][MatrixCols].
-        // Bias is [Individuo][Col].
-        // Actually, Bias is [Individuo][Neuron].
-        // Data is [Individuo][Neuron + BatchOffset].
-        // The structure of Data depends on the Layer.
-        // Layer < Last: NUM_NEURONIOS per column.
-        // Layer == Last: NUM_SAIDAS per column.
-        
-        // Infer dimensions from size? No, that's messy.
-        // But we know this function is called either for Hidden (NUM_NEURONIOS) or Output (NUM_SAIDAS).
-        // The logic "idx % NUM_NEURONIOS" works if we pass the stride.
-        // But we don't pass the stride.
-        // HACK: Detect stride based on size? No, unreliable.
-        // Let's assume standard behavior:
-        // We effectively need to mod by the 'Height' of the matrix column.
-        // If data is (NUM_INDIVIDUOS * NUM_NEURONIOS * BATCH), H = NUM_NEURONIOS.
-        // If data is (NUM_INDIVIDUOS * NUM_SAIDAS * BATCH), H = NUM_SAIDAS.
-        
-        // Just relying on user to allow us to hardcode?
-        // Let's assume NUM_NEURONIOS for now, but Output layer breaks this.
-        
-        // IMPORTANT: The original code used a flat AddBiasAndRelu.
-        // Original: Bias size was [NUM_INDIVIDUOS * OutputSize].
-        // Data size: [NUM_INDIVIDUOS * OutputSize].
-        // So 1-to-1 mapping.
-        // NOW: Data size > Bias size (because Batch > 1).
-        // Bias is repeated for every Candle in the Batch.
-        // Data: [Ind 0 [Candle 0][Candle 1]][Ind 1]...
-        // Bias: [Ind 0             ][Ind 1]...
-        
-        // We need separate Kernels or pass the "Stride/Height" to this kernel.
-        // I will change the signature.
     }
 }
 // New Signature implementation
@@ -155,24 +122,6 @@ __global__ void ReLuSaida(Individuo* d_individuos, IndividuosPesos* d_individuos
         __half valVenda = d_individuosPesos->valoresOut[offset];
         __half valCompra = d_individuosPesos->valoresOut[offset + 1];
         __half zero = __float2half(0.f);
-
-        // Encoding output logic into a bitfield or temporary storage could be better, 
-        // but 'Individuo' struct has only one 'saidas'. 
-        // WARNING: storing 'saidas' implies we process them one by one or store history.
-        // The original code only stored ONE action per individual (the latest one?). 
-        // Wait, the original code ran LOOP over candles.
-        // inside loop: inferencia -> check -> store action in 'saidas' -> verify -> update ganho/perda.
-        // So 'saidas' is overwritten every candle.
-        // We need to keep this behavior. 'saidas' is ephemeral.
-        // Actually, we can just skip storing to 'saidas' if verify is done in same batch?
-        // Let's modify verificarCompraVenda to take the raw output values directly!
-        // So we don't need ReLuSaida to write to d_individuos.saidas if we verify immediately.
-        // However, keeping modularity is good. 
-        // Let's assume verifying is done in a separate kernel that reads memory.
-        
-        // Since 'saidas' is uint8_t, we clearly can't store 128 results there.
-        // We MUST verify directly or use a temporary buffer.
-        // Optimizing: Merge 'ReLuSaida' logic into 'verificarCompraVenda'.
     }
 }
 
@@ -192,18 +141,19 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
         __half valCompra = d_individuosPesos->valoresOut[offset + 1];
         
         // Converte para float para comparação
-        float fValVenda = __half2float(valVenda);
-        float fValCompra = __half2float(valCompra);
-        
-        // Solução 1: Lógica baseada em comparação de maior valor
-        const float threshold = 0.01f;    // Confiança mínima para agir (reduzido)
-        const float difference = 0.001f;  // Diferença mínima entre saídas (reduzido)
+        float fValOut1 = __half2float(valVenda);
+        float fValOut2 = __half2float(valCompra);
         
         int acao = 0;
-        if (fValCompra > fValVenda + difference && fValCompra > threshold) {
-            acao = 1; // Compra
-        } else if (fValVenda > fValCompra + difference && fValVenda > threshold) {
+        // Lógica solicitada:
+        // Se neuronio 1 for 0 e neuronio 2 for true (>0) -> Venda
+        // Se neuronio 1 for true (>0) e neuronio 2 for 0 -> Compra
+        // Caso ambos false (0) ou ambos true (>0) -> Nada
+        
+        if (fValOut1 == 0.0f && fValOut2 > 0.0f) {
             acao = 2; // Venda
+        } else if (fValOut1 > 0.0f && fValOut2 == 0.0f) {
+            acao = 1; // Compra
         }
 
         float CandleAtualFechamento = d_candles[candleAtual].fechamento;
@@ -425,59 +375,6 @@ __host__ void inferencia(Individuo* d_individuos, IndividuosPesos* d_individuosP
         int totalElements = NUM_INDIVIDUOS * NUM_NEURONIOS * CANDLE_BATCH_SIZE;
         int threads = 256;
         int blocks = (totalElements + threads - 1) / threads; // Naively big grid
-        
-        // Caution: AddBiasAndRelu expects 'bias' to be broadcast?
-        // Current 'AddBiasAndRelu': 
-        // __global__ void AddBiasAndRelu(__half* dados, const __half* bias, int size)
-        // bias size: [NUM_CAMADAS][NUM_INDIVIDUOS * NUM_NEURONIOS]
-        // dados size: [NUM_INDIVIDUOS * NUM_NEURONIOS * CANDLE_BATCH_SIZE]
-        // Bias needs to be repeated for each Candle in the Batch?
-        // Bias depends on Neuron Index.
-        // d_bias structure: [Individuo 0][Neuron 0..N], [Individuo 1]...
-        // Data structure:   [Individuo 0][Neuron 0..N for Candle 0][Neuron 0..N for Candle 1]...
-        // Wait.
-        // Matrix C output: (m x n) = (NUM_NEURONIOS x CANDLE_BATCH_SIZE).
-        // Stored Column Major.
-        // [Neuron 0..N (C0)], [Neuron 0..N (C1)] ...
-        // So for Individuo I:
-        // Data block is size (NUM_NEURONIOS * CANDLE_BATCH_SIZE).
-        // Bias block is size (NUM_NEURONIOS).
-        // We need a modulated index for Bias.
-        // AddBiasAndRelu is simple linear kernel.
-        // We need to modify it or create a new one.
-        // It's easier to make a Batched version.
-        
-        // Reusing AddBiasAndRelu logic with a hack?
-        // No, let's just make a new simple kernel inline for now or assume modification.
-        // Actually, I'll modify AddBiasAndRelu above.
-        // Wait, I can't modify AddBiasAndRelu easily without changing its signature everywhere.
-        // But it's only called here.
-        // I will update AddBiasAndRelu logic in a separate edit if needed.
-        // Actually, let's redefine AddBiasAndRelu to be aware of broadcasting.
-        // But wait, the standard AddBiasAndRelu takes 'bias' array.
-        // index 'idx' in data.
-        // We need 'biasIdx'.
-        // Data: [Ind 0 - Cand 0 - N 0..607] [Ind 0 - Cand 1 - N 0..607] ...
-        // Bias: [Ind 0 - N 0..607]
-        // biasIdx = (idx / (NUM_NEURONIOS * CANDLE_BATCH_SIZE)) * NUM_NEURONIOS + (idx % NUM_NEURONIOS).
-        // Incorrect.
-        // Data Layout: StrideC = NUM_NEURONIOS * CANDLE_BATCH_SIZE.
-        // Individual I starts at I * StrideC.
-        // Inside Individual I:
-        //   Col 0 (Candle 0): 0..NUM_NEURONIOS-1
-        //   Col 1 (Candle 1): NUM_NEURONIOS..2*NUM_NEURONIOS-1
-        // Bias for Ind I:
-        //   0..NUM_NEURONIOS-1.
-        // So within one individual, bias repeats every NUM_NEURONIOS.
-        // So biasIdx = (IndividuoIdx * NUM_NEURONIOS) + (NeuronIdx)
-        // NeuronIdx = (idx % (NUM_NEURONIOS * CANDLE_BATCH_SIZE)) % NUM_NEURONIOS
-        //           = idx % NUM_NEURONIOS.
-        // IndividuoIdx = idx / (NUM_NEURONIOS * CANDLE_BATCH_SIZE).
-        // So biasIdx = (idx / (NUM_NEURONIOS * CANDLE_BATCH_SIZE)) * NUM_NEURONIOS + (idx % NUM_NEURONIOS).
-        // Yes.
-        
-        // I will update AddBiasAndRelu separately. For now, calling it with the right size but logic will be wrong if not updated.
-        // I will perform the update to AddBiasAndRelu in another chunk.
     
         AddBiasAndRelu<<<blocks, threads>>>(d_individuosPesos->valoresSwap, d_individuosPesos->bias[i], totalElements);
         
@@ -496,30 +393,14 @@ __host__ void inferencia(Individuo* d_individuos, IndividuosPesos* d_individuosP
         __half* d_C = d_individuosPesos->valoresOut;
 
         long long int strideA = NUM_NEURONIOS * NUM_NEURONIOS; // This is wrong. Last layer is (NUM_SAIDAS x NUM_NEURONIOS)?
-        // Wait. Last layer weights:
-        // Struct: __half pesos[NUM_CAMADAS][NUM_INDIVIDUOS * NUM_NEURONIOS * NUM_NEURONIOS];
-        // Allocated as NUM_NEURONIOS squared. But Last layer uses (NUM_SAIDAS x NUM_NEURONIOS)?
-        // If so, 2x608.
-        // If the array is packed 608x608, we can just use the first part.
-        // But strideA MUST match the stored gap between Individual Matrices.
-        // The weight array has stride `NUM_NEURONIOS * NUM_NEURONIOS`.
-        // So even if we use smaller matrix, the stride is the full size. Correct.
+       
         
         CHECK_CUBLAS(cublasGemmStridedBatchedEx(
             handle, CUBLAS_OP_N, CUBLAS_OP_N,
             m, n, k,
             &alpha, d_A, CUDA_R_16F, m, NUM_NEURONIOS * NUM_NEURONIOS,
             d_B, CUDA_R_16F, k, (long long)NUM_NEURONIOS * CANDLE_BATCH_SIZE, // This strideB was wrong in original code?? 
-                                              // "d_B, CUDA_R_16F, k, NUM_NEURONIOS" -> 4th param is ldb. 
-                                              // 5th param is strideB.
-            // Original code:
-            // d_B, CUDA_R_16F, k, NUM_NEURONIOS,
-            // strideB = NUM_NEURONIOS. 
-            // This assumes B is [NUM_INDIVIDUOS][NUM_NEURONIOS].
-            // Correct.
-            // Now B is [NUM_INDIVIDUOS][NUM_NEURONIOS * CANDLE_BATCH_SIZE].
-            // So strideB = NUM_NEURONIOS * CANDLE_BATCH_SIZE.
-            // ldb = k = NUM_NEURONIOS.
+     
             
             &beta, d_C, CUDA_R_16F, m, (long long)m * CANDLE_BATCH_SIZE, // strideC = m * CANDLE_BATCH_SIZE
             // ldc = m.
