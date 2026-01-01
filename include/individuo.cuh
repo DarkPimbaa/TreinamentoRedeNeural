@@ -183,8 +183,8 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
         float fValCompra = __half2float(valCompra);
         
         // Solução 1: Lógica baseada em comparação de maior valor
-        const float threshold = 0.1f;    // Confiança mínima para agir
-        const float difference = 0.05f;  // Diferença mínima entre saídas
+        const float threshold = 0.01f;    // Confiança mínima para agir (reduzido)
+        const float difference = 0.001f;  // Diferença mínima entre saídas (reduzido)
         
         int acao = 0;
         if (fValCompra > fValVenda + difference && fValCompra > threshold) {
@@ -224,41 +224,58 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
 __global__ void verificarMelhor(Individuo *d_individuos, int *d_melhor, int numCandlesBatch){
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx == 0) {
-        int pontuacaoMelhor = -200000;
-        *d_melhor = 0; // Inicializa com 0 por segurança
+        int pontuacaoMelhor = INT_MIN;
+        int idxMelhorQualificado = -1;
+        int idxMelhorFallback = 0;  // Fallback para caso ninguém qualifique
+        float melhorTaxaFallback = 0.0f;
         
-        // Solução 3: Penalidade por inatividade
-        int minTrades = numCandlesBatch / 200; // Pelo menos 1 trade a cada 200 candles
-        
-        for (size_t i = 0; i<NUM_INDIVIDUOS; i++) {
+        for (size_t i = 0; i < NUM_INDIVIDUOS; i++) {
             int totalTrades = d_individuos[i].ganho + d_individuos[i].perda;
-            int pontuacaoIndividuoAtual = 0;
-            pontuacaoIndividuoAtual += d_individuos[i].ganho;
-            pontuacaoIndividuoAtual -= d_individuos[i].perda;
+            float taxaAcerto = (totalTrades > 0) 
+                ? ((d_individuos[i].ganho / (float)totalTrades) * 100.0f) 
+                : 0.0f;
             
-            // Penalidade por inatividade
-            if (totalTrades < minTrades) {
-                pontuacaoIndividuoAtual -= (minTrades - totalTrades) * 2;
-            }
+            d_individuos[i].taxaVitoria = taxaAcerto;
             
-            // Bonus por atividade saudável (não muito pouco, não excessivo)
-            if (totalTrades > minTrades && totalTrades < numCandlesBatch / 10) {
-                pontuacaoIndividuoAtual += totalTrades / 100;
-            }
+            int pontuacao;
             
-            if (pontuacaoIndividuoAtual > pontuacaoMelhor) {
-                pontuacaoMelhor = pontuacaoIndividuoAtual;
-                *d_melhor = i;
-                if (totalTrades > 0) {
-                    d_individuos[i].taxaVitoria = ((d_individuos[i].ganho / (float)totalTrades) * 100);
-                } else {
-                    d_individuos[i].taxaVitoria = 0;
+            // === NOVA LÓGICA: Taxa mínima de 60% ===
+            if (taxaAcerto >= 60.0f && totalTrades > 0) {
+                // Indivíduo qualificado: priorizar volume
+                float bonusQualidade = (taxaAcerto - 60.0f) * 100.0f;
+                float bonusVolume = (float)totalTrades * 10.0f;
+                pontuacao = (int)(bonusQualidade + bonusVolume);
+                
+                if (pontuacao > pontuacaoMelhor) {
+                    pontuacaoMelhor = pontuacao;
+                    idxMelhorQualificado = i;
+                }
+            } else {
+                // Fallback: guardar o melhor entre os não-qualificados
+                if (taxaAcerto > melhorTaxaFallback || 
+                    (taxaAcerto == melhorTaxaFallback && totalTrades > 
+                     (d_individuos[idxMelhorFallback].ganho + d_individuos[idxMelhorFallback].perda))) {
+                    melhorTaxaFallback = taxaAcerto;
+                    idxMelhorFallback = i;
                 }
             }
         }
-        printf("Taxa de vitoria do melhor individuo: %f\n",d_individuos[*d_melhor].taxaVitoria);
-        printf("Ganho do melhor individuo: %i\n",d_individuos[*d_melhor].ganho);
-        printf("perda do melhor individuo: %i\n",d_individuos[*d_melhor].perda);
+        
+        // Escolher melhor: qualificado ou fallback
+        if (idxMelhorQualificado >= 0) {
+            *d_melhor = idxMelhorQualificado;
+        } else {
+            *d_melhor = idxMelhorFallback;
+        }
+        
+        int totalTradesMelhor = d_individuos[*d_melhor].ganho + d_individuos[*d_melhor].perda;
+        float pctTrades = (float)totalTradesMelhor / (float)numCandlesBatch * 100.0f;
+        
+        printf("Taxa de vitoria do melhor individuo: %f\n", d_individuos[*d_melhor].taxaVitoria);
+        printf("Ganho do melhor individuo: %i\n", d_individuos[*d_melhor].ganho);
+        printf("Perda do melhor individuo: %i\n", d_individuos[*d_melhor].perda);
+        printf("Trades: %d / %d (%.2f%%)\n", totalTradesMelhor, numCandlesBatch, pctTrades);
+        printf("Qualificado (>= 60%%): %s\n", (idxMelhorQualificado >= 0) ? "SIM" : "NAO");
     }
 };
 
