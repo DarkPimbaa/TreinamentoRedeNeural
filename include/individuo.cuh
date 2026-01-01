@@ -28,7 +28,7 @@
 #endif
 
 #ifndef MAXIMO_RODADAS_SEM_TRADES
-#define MAXIMO_RODADAS_SEM_TRADES 50
+#define MAXIMO_RODADAS_SEM_TRADES 120
 #endif
 
 // Constante de Bias solicitada
