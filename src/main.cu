@@ -1,8 +1,8 @@
-#define NUM_INDIVIDUOS 5000
+#define NUM_INDIVIDUOS 7000
 #define NUM_CAMADAS 4
 #define NUM_NEURONIOS 608 // multiplo de 16
 #define NUM_SAIDAS 2
-#define TEMPO_TREINAMENTO 10.0 // tempo total de treinamento em minutos
+#define TEMPO_TREINAMENTO 1.0 // tempo total de treinamento em minutos
 #define NUM_CANDLES_BATCH 500'000 // numero de candles que cada individuo vai "apostar" antes da verificação
 #define TAMANHO_BTCCSV 954620
 
@@ -97,7 +97,7 @@ int main() {
         cudaDeviceSynchronize();
 
         // kernel que verifica qual for o melhor
-        verificarMelhor<<<1,32>>>(d_individuos, d_idxMelhor);
+        verificarMelhor<<<1,32>>>(d_individuos, d_idxMelhor, NUM_CANDLES_BATCH);
         cudaDeviceSynchronize();
 
         // kernel que repopular o array de individuos com copias do melhor

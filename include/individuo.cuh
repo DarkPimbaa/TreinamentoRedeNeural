@@ -177,14 +177,20 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
         long long offset = (long long)idx * NUM_SAIDAS * CANDLE_BATCH_SIZE + (candleBatchIdx * NUM_SAIDAS);
         __half valVenda = d_individuosPesos->valoresOut[offset];
         __half valCompra = d_individuosPesos->valoresOut[offset + 1];
-        __half zero = __float2half(0.f);
+        
+        // Converte para float para comparação
+        float fValVenda = __half2float(valVenda);
+        float fValCompra = __half2float(valCompra);
+        
+        // Solução 1: Lógica baseada em comparação de maior valor
+        const float threshold = 0.1f;    // Confiança mínima para agir
+        const float difference = 0.05f;  // Diferença mínima entre saídas
         
         int acao = 0;
-        if (valVenda < zero && valCompra > zero) {
-            acao = 2; // Vendeu
-        }
-        else if (valVenda > zero && valCompra < zero) {
-            acao = 1; // Comprou
+        if (fValCompra > fValVenda + difference && fValCompra > threshold) {
+            acao = 1; // Compra
+        } else if (fValVenda > fValCompra + difference && fValVenda > threshold) {
+            acao = 2; // Venda
         }
 
         float CandleAtualFechamento = d_candles[candleAtual].fechamento;
@@ -215,20 +221,36 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
     }
 };
 
-__global__ void verificarMelhor(Individuo *d_individuos, int *d_melhor){
+__global__ void verificarMelhor(Individuo *d_individuos, int *d_melhor, int numCandlesBatch){
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx == 0) {
-        int pontuacaoMelhor = -2000000000;
+        int pontuacaoMelhor = -200000;
         *d_melhor = 0; // Inicializa com 0 por segurança
+        
+        // Solução 3: Penalidade por inatividade
+        int minTrades = numCandlesBatch / 200; // Pelo menos 1 trade a cada 200 candles
+        
         for (size_t i = 0; i<NUM_INDIVIDUOS; i++) {
+            int totalTrades = d_individuos[i].ganho + d_individuos[i].perda;
             int pontuacaoIndividuoAtual = 0;
             pontuacaoIndividuoAtual += d_individuos[i].ganho;
             pontuacaoIndividuoAtual -= d_individuos[i].perda;
+            
+            // Penalidade por inatividade
+            if (totalTrades < minTrades) {
+                pontuacaoIndividuoAtual -= (minTrades - totalTrades) * 2;
+            }
+            
+            // Bonus por atividade saudável (não muito pouco, não excessivo)
+            if (totalTrades > minTrades && totalTrades < numCandlesBatch / 10) {
+                pontuacaoIndividuoAtual += totalTrades / 100;
+            }
+            
             if (pontuacaoIndividuoAtual > pontuacaoMelhor) {
                 pontuacaoMelhor = pontuacaoIndividuoAtual;
                 *d_melhor = i;
-                if ((d_individuos[i].ganho + d_individuos[i].perda) > 0) {
-                    d_individuos[i].taxaVitoria = ((d_individuos[i].ganho / (float)(d_individuos[i].ganho + d_individuos[i].perda)) * 100);
+                if (totalTrades > 0) {
+                    d_individuos[i].taxaVitoria = ((d_individuos[i].ganho / (float)totalTrades) * 100);
                 } else {
                     d_individuos[i].taxaVitoria = 0;
                 }
