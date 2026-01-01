@@ -27,6 +27,10 @@
 #define CANDLE_BATCH_SIZE 128
 #endif
 
+#ifndef MAXIMO_RODADAS_SEM_TRADES
+#define MAXIMO_RODADAS_SEM_TRADES 50
+#endif
+
 // Constante de Bias solicitada
 #define BIAS 1.0f
 
@@ -46,6 +50,10 @@ struct Individuo {
     float taxaVitoria;
     uint8_t saidas;
     curandState state; // Estado do gerador aleatório para cada individuo
+    
+    // Sistema Bvivo
+    int rodadasSemTrade;  // Contador de inatividade
+    bool bvivo;           // true = vivo, false = morto
 
     __host__ __device__
     void init() {
@@ -53,6 +61,8 @@ struct Individuo {
         perda = 0;
         taxaVitoria = 0.f;
         saidas = 0;
+        rodadasSemTrade = 0;
+        bvivo = true;
     }
 };
 
@@ -171,6 +181,9 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
     int candleBatchIdx = blockIdx.y; // Índice no Batch (0 a numCandles-1)
 
     if (idx < NUM_INDIVIDUOS && candleBatchIdx < numCandles) {
+        // Skip se já está morto
+        if (!d_individuos[idx].bvivo) return;
+        
         int candleAtual = startCandle + candleBatchIdx;
         
         // Load outputs directly
@@ -199,23 +212,35 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
         if (acao == 1) {
             //compra
             if (CandleAtualFechamento < CandleDaFrenteFechamento) {
-                d_individuos[idx].ganho++;
+                atomicAdd(&d_individuos[idx].ganho, 1);
             }else {
-                d_individuos[idx].perda++;
+                atomicAdd(&d_individuos[idx].perda, 1);
             }
 
             if (CandleAtualFechamento == CandleDaFrenteFechamento) {
-                d_individuos[idx].perda++;
+                atomicAdd(&d_individuos[idx].perda, 1);
             }
+            
+            // Fez trade: reseta contador de inatividade
+            d_individuos[idx].rodadasSemTrade = 0;
         } else if (acao == 2) {
             //venda
             if (CandleAtualFechamento > CandleDaFrenteFechamento) {
-                d_individuos[idx].ganho++;
+                atomicAdd(&d_individuos[idx].ganho, 1);
             }else {
-                d_individuos[idx].perda++;
+                atomicAdd(&d_individuos[idx].perda, 1);
             }
             if (CandleAtualFechamento == CandleDaFrenteFechamento) {
-                d_individuos[idx].perda++;
+                atomicAdd(&d_individuos[idx].perda, 1);
+            }
+            
+            // Fez trade: reseta contador de inatividade
+            d_individuos[idx].rodadasSemTrade = 0;
+        } else {
+            // Não fez nada: incrementa contador e verifica morte
+            int novoValor = atomicAdd(&d_individuos[idx].rodadasSemTrade, 1) + 1;
+            if (novoValor >= MAXIMO_RODADAS_SEM_TRADES) {
+                d_individuos[idx].bvivo = false;
             }
         }
     }
@@ -224,10 +249,15 @@ __global__ void verificarCompraVenda(Individuo *d_individuos, IndividuosPesos* d
 __global__ void verificarMelhor(Individuo *d_individuos, int *d_melhor, int numCandlesBatch){
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx == 0) {
-        int pontuacaoMelhor = INT_MIN;
-        int idxMelhorQualificado = -1;
-        int idxMelhorFallback = 0;  // Fallback para caso ninguém qualifique
-        float melhorTaxaFallback = 0.0f;
+        int idxMelhorVivo = -1;
+        float melhorTaxaVivo = 0.0f;
+        int melhorTradesVivo = 0;
+        
+        int idxMelhorMorto = 0;  // Fallback: melhor entre os mortos
+        float melhorTaxaMorto = 0.0f;
+        int melhorTradesMorto = 0;
+        
+        int vivosCount = 0;
         
         for (size_t i = 0; i < NUM_INDIVIDUOS; i++) {
             int totalTrades = d_individuos[i].ganho + d_individuos[i].perda;
@@ -237,45 +267,46 @@ __global__ void verificarMelhor(Individuo *d_individuos, int *d_melhor, int numC
             
             d_individuos[i].taxaVitoria = taxaAcerto;
             
-            int pontuacao;
-            
-            // === NOVA LÓGICA: Taxa mínima de 60% ===
-            if (taxaAcerto >= 60.0f && totalTrades > 0) {
-                // Indivíduo qualificado: priorizar volume
-                float bonusQualidade = (taxaAcerto - 60.0f) * 100.0f;
-                float bonusVolume = (float)totalTrades * 10.0f;
-                pontuacao = (int)(bonusQualidade + bonusVolume);
+            if (d_individuos[i].bvivo) {
+                // Indivíduo VIVO: candidato válido
+                vivosCount++;
                 
-                if (pontuacao > pontuacaoMelhor) {
-                    pontuacaoMelhor = pontuacao;
-                    idxMelhorQualificado = i;
+                // Prioriza taxa de acerto, depois volume
+                if (taxaAcerto > melhorTaxaVivo || 
+                    (taxaAcerto == melhorTaxaVivo && totalTrades > melhorTradesVivo)) {
+                    melhorTaxaVivo = taxaAcerto;
+                    melhorTradesVivo = totalTrades;
+                    idxMelhorVivo = i;
                 }
             } else {
-                // Fallback: guardar o melhor entre os não-qualificados
-                if (taxaAcerto > melhorTaxaFallback || 
-                    (taxaAcerto == melhorTaxaFallback && totalTrades > 
-                     (d_individuos[idxMelhorFallback].ganho + d_individuos[idxMelhorFallback].perda))) {
-                    melhorTaxaFallback = taxaAcerto;
-                    idxMelhorFallback = i;
+                // Indivíduo MORTO: guardar para fallback
+                if (taxaAcerto > melhorTaxaMorto || 
+                    (taxaAcerto == melhorTaxaMorto && totalTrades > melhorTradesMorto)) {
+                    melhorTaxaMorto = taxaAcerto;
+                    melhorTradesMorto = totalTrades;
+                    idxMelhorMorto = i;
                 }
             }
         }
         
-        // Escolher melhor: qualificado ou fallback
-        if (idxMelhorQualificado >= 0) {
-            *d_melhor = idxMelhorQualificado;
+        // Escolher melhor: vivo ou ressuscitar morto
+        if (idxMelhorVivo >= 0) {
+            *d_melhor = idxMelhorVivo;
         } else {
-            *d_melhor = idxMelhorFallback;
+            // TODOS MORRERAM: ressuscitar o melhor cadáver
+            *d_melhor = idxMelhorMorto;
+            d_individuos[idxMelhorMorto].bvivo = true;
+            d_individuos[idxMelhorMorto].rodadasSemTrade = 0;
+            printf("!!! TODOS MORRERAM - Ressuscitando individuo %d !!!\n", idxMelhorMorto);
         }
         
         int totalTradesMelhor = d_individuos[*d_melhor].ganho + d_individuos[*d_melhor].perda;
         float pctTrades = (float)totalTradesMelhor / (float)numCandlesBatch * 100.0f;
         
-        printf("Taxa de vitoria do melhor individuo: %f\n", d_individuos[*d_melhor].taxaVitoria);
-        printf("Ganho do melhor individuo: %i\n", d_individuos[*d_melhor].ganho);
-        printf("Perda do melhor individuo: %i\n", d_individuos[*d_melhor].perda);
+        printf("Vivos: %d / %d\n", vivosCount, NUM_INDIVIDUOS);
+        printf("Taxa de vitoria do melhor: %.2f%%\n", d_individuos[*d_melhor].taxaVitoria);
+        printf("Ganho: %d | Perda: %d\n", d_individuos[*d_melhor].ganho, d_individuos[*d_melhor].perda);
         printf("Trades: %d / %d (%.2f%%)\n", totalTradesMelhor, numCandlesBatch, pctTrades);
-        printf("Qualificado (>= 60%%): %s\n", (idxMelhorQualificado >= 0) ? "SIM" : "NAO");
     }
 };
 
