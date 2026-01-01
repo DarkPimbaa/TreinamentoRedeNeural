@@ -247,12 +247,10 @@ __global__ void verificarMelhor(Individuo *d_individuos, int *d_melhor, int numC
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx == 0) {
         int idxMelhorVivo = -1;
-        float melhorTaxaVivo = 0.0f;
-        int melhorTradesVivo = 0;
+        float melhorTaxaVivo = -1.0f;
         
         int idxMelhorMorto = 0;  // Fallback: melhor entre os mortos
-        float melhorTaxaMorto = 0.0f;
-        int melhorTradesMorto = 0;
+        float melhorTaxaMorto = -1.0f;
         
         int vivosCount = 0;
         
@@ -268,19 +266,15 @@ __global__ void verificarMelhor(Individuo *d_individuos, int *d_melhor, int numC
                 // Indivíduo VIVO: candidato válido
                 vivosCount++;
                 
-                // Prioriza taxa de acerto, depois volume
-                if (taxaAcerto > melhorTaxaVivo || 
-                    (taxaAcerto == melhorTaxaVivo && totalTrades > melhorTradesVivo)) {
+                // Prioriza APENAS taxa de acerto
+                if (taxaAcerto > melhorTaxaVivo) {
                     melhorTaxaVivo = taxaAcerto;
-                    melhorTradesVivo = totalTrades;
                     idxMelhorVivo = i;
                 }
             } else {
                 // Indivíduo MORTO: guardar para fallback
-                if (taxaAcerto > melhorTaxaMorto || 
-                    (taxaAcerto == melhorTaxaMorto && totalTrades > melhorTradesMorto)) {
+                if (taxaAcerto > melhorTaxaMorto) {
                     melhorTaxaMorto = taxaAcerto;
-                    melhorTradesMorto = totalTrades;
                     idxMelhorMorto = i;
                 }
             }
@@ -301,9 +295,13 @@ __global__ void verificarMelhor(Individuo *d_individuos, int *d_melhor, int numC
         float pctTrades = (float)totalTradesMelhor / (float)numCandlesBatch * 100.0f;
         
         printf("Vivos: %d / %d\n", vivosCount, NUM_INDIVIDUOS);
+        printf("==============================================\n");
         printf("Taxa de vitoria do melhor: %.2f%%\n", d_individuos[*d_melhor].taxaVitoria);
+        printf("==============================================\n");
         printf("Ganho: %d | Perda: %d\n", d_individuos[*d_melhor].ganho, d_individuos[*d_melhor].perda);
+        printf("==============================================\n");
         printf("Trades: %d / %d (%.2f%%)\n", totalTradesMelhor, numCandlesBatch, pctTrades);
+        printf("==============================================\n");
     }
 };
 
